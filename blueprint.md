@@ -774,6 +774,246 @@ Only then may it emit `object://retrieve/semantic.v1`.
 
 ---
 
+### 12.6 π-GCCP v1 Test Harness (Reference Pack)
+
+This is the authoritative test harness and parity baseline. GPU must conform to this CPU truth.
+
+**Test vector format**
+
+```json
+{
+  "epsilon": 0.1745329,
+  "pairs": [
+    {
+      "A": [[1, 0]],
+      "B": [[1, 0]],
+      "expected": 1.0
+    },
+    {
+      "A": [[1, 0]],
+      "B": [[0, 1]],
+      "expected": 0.0
+    }
+  ]
+}
+```
+
+**CPU exact-math reference (authoritative)**
+
+```js
+export function gccpCollapse(vecA, vecB, epsilon) {
+  let accX = 0;
+  let accY = 0;
+
+  for (let i = 0; i < vecA.length; i++) {
+    const ax = vecA[i][0];
+    const ay = vecA[i][1];
+    const bx = vecB[i][0];
+    const by = vecB[i][1];
+
+    const magA = Math.hypot(ax, ay);
+    const magB = Math.hypot(bx, by);
+    if (magA === 0 || magB === 0) continue;
+
+    let dot = (ax * bx + ay * by) / (magA * magB);
+    dot = Math.max(-1, Math.min(1, dot));
+
+    const phase = Math.acos(dot);
+    const weight = Math.abs(phase) <= epsilon ? 1 : 0;
+
+    accX += ax * weight;
+    accY += ay * weight;
+  }
+
+  const mag = Math.hypot(accX, accY);
+  return mag === 0 ? 0 : accX / mag;
+}
+```
+
+This function defines π-GCCP truth.
+
+**Harness runner**
+
+```js
+import { gccpCollapse } from "./gccp_cpu.js";
+
+export function runGCCPTests(testSpec) {
+  for (const test of testSpec.pairs) {
+    const out = gccpCollapse(test.A, test.B, testSpec.epsilon);
+    if (Math.abs(out - test.expected) > 1e-6) {
+      throw new Error(
+        `FAIL: expected ${test.expected}, got ${out}`
+      );
+    }
+  }
+  return true;
+}
+```
+
+**GPU parity rule**
+
+```
+|collapse_gpu − collapse_cpu| ≤ 1e−6
+```
+
+Violation ⇒ non-compliant.
+
+### 12.7 SVG-Tensor Index Canonicalizer (Reference)
+
+SVG is geometry, not presentation. Canonicalization produces a stable geometric index.
+
+**Canonicalization rules (frozen)**
+
+1. Strip all visual attributes (`fill`, `stroke`, `opacity`, filters, transforms).
+2. Preserve DOM order.
+3. Convert all geometry to absolute coordinates.
+4. Quantize floats → `f32`.
+5. Remove unused nodes.
+6. Sort adjacency lists by target index.
+
+**Canonicalizer**
+
+```js
+export function canonicalizeSVGTensor(svg) {
+  const nodes = [];
+  const edges = [];
+
+  svg.paths.forEach((p, idx) => {
+    nodes.push({
+      id: idx,
+      x: Math.fround(p.x),
+      y: Math.fround(p.y)
+    });
+
+    p.edges?.forEach(e => {
+      edges.push([idx, e.target]);
+    });
+  });
+
+  edges.sort((a, b) =>
+    a[0] !== b[0] ? a[0] - b[0] : a[1] - b[1]
+  );
+
+  return { nodes, edges };
+}
+```
+
+**Canonical hash identity**
+
+```
+index_hash = sha256(nodes || edges)
+```
+
+If this hash matches, the SVG-Tensor is identical regardless of rendering.
+
+### 12.8 SCXQ2 Binary Packer / Unpacker (Reference)
+
+SCXQ2 is identity-preserving compression, not a codec.
+
+**Lane layout (restated)**
+
+| Lane    | Contents        |
+| ------- | --------------- |
+| DICT    | Symbol table    |
+| FIELD   | Metadata        |
+| LANE    | Vector geometry |
+| EDGE    | Topology        |
+| QUANTUM | Phase + weight  |
+
+**Binary packer**
+
+```js
+export function packSCXQ2(index, quantum) {
+  const buffers = [];
+
+  buffers.push(encodeDICT(index));
+  buffers.push(encodeFIELD(index));
+  buffers.push(encodeLANE(index.nodes));
+  buffers.push(encodeEDGE(index.edges));
+  buffers.push(encodeQUANTUM(quantum));
+
+  return concatBuffers(buffers);
+}
+```
+
+**Unpacker**
+
+```js
+export function unpackSCXQ2(buffer) {
+  const lanes = splitLanes(buffer);
+
+  return {
+    index: {
+      nodes: decodeLANE(lanes.LANE),
+      edges: decodeEDGE(lanes.EDGE)
+    },
+    quantum: decodeQUANTUM(lanes.QUANTUM)
+  };
+}
+```
+
+**Hash rule (hard law)**
+
+```
+hash = sha256(DICT || FIELD || LANE || EDGE)
+```
+
+QUANTUM lane excluded to allow π-profile swapping and cache reuse.
+
+### 12.9 Retrieval Ranking Proof Appendix (Formal)
+
+This proves `object://retrieve/semantic.v1` is well-defined.
+
+**Definitions**
+
+- G = SVG-Tensor geometry
+- Pᵢ = retrieval profiles (ngram, embedding, etc.)
+- sᵢ = collapse(G, Pᵢ) ∈ [0,1]
+
+**Superposition ranking**
+
+```
+S = Σ wᵢ · sᵢ,  where Σ wᵢ = 1
+```
+
+**Ordering lemma**
+
+If:
+
+```
+∀ i, sᵢ(A) ≥ sᵢ(B)
+```
+
+Then:
+
+```
+S(A) ≥ S(B)
+```
+
+Proof: linear combination over non-negative weights preserves order.
+
+**Interference stability lemma**
+
+If profiles disagree strongly:
+
+```
+|sᵢ − sⱼ| > π/2
+```
+
+Then weights decay symmetrically:
+
+```
+wᵢ, wⱼ ← κ wᵢ, κ wⱼ
+```
+
+This guarantees bounded influence, no dominance, and continuous ranking.
+
+**Determinism theorem**
+
+Given a canonical index, fixed ε, and fixed profile weights, retrieval ranking is deterministic, replayable, and cache-safe.
+
+---
+
 ## 13. MX2LM Cluster Runtime (XCFE-Clean)
 
 This section freezes the **cluster-aware object server** and its **normative schema**.
@@ -2165,108 +2405,267 @@ SVG-Tensors must not be interpreted visually by default. Rendering is optional, 
 
 ---
 
-## 17. SVG-Tensor Canonicalization + WebGPU Mapping (Normative)
+## 17. SVG-Tensor Canonicalization Rules (v1)
 
-This section defines the canonical byte form for SVG-Tensors and the normative GPU buffer mapping. Deviations are non-compliant.
+**Spec ID:** `mx2lm.svg-tensor.canonical.v1`  
+**Status:** Normative / Frozen
 
-### 17.1 SVG-Tensor Canonicalization (`svg-tensor.canonical.v1`)
+### 17.1 Prime Law
 
-Canonicalization defines the single authoritative byte stream for hashing, verification, compression, and GPU lowering.
+Canonicalization removes representation variance, not meaning. Two SVG-Tensors are equivalent **iff** their canonical forms are byte-identical.
 
-**Canonicalization goals**
+### 17.2 Accepted SVG Subset
 
-- identical geometry ⇒ identical bytes
-- identical bytes ⇒ identical hash
-- environment-independent meaning
-- compression safety
-- GPU-stable lowering
+Only these SVG elements are legal inputs:
 
-**Pipeline (fixed order)**
+- `<svg>`
+- `<g>`
+- `<path>`
+- `<line>`
+- `<circle>`
+- `<rect>`
 
-```
-raw SVG
-  ↓
-parse XML
-  ↓
-strip illegal elements
-  ↓
-normalize structure
-  ↓
-normalize attributes
-  ↓
-normalize numeric values
-  ↓
-normalize transforms
-  ↓
-canonical ordering
-  ↓
-canonical serialization
-  ↓
-hash
-```
+All others ⇒ `canonicalization_error.unsupported_element`.
 
-**Structural normalization**
+### 17.3 Coordinate Normalization
 
-- Exactly one `<svg>` root.
-- Explicit `width`, `height`, and `viewBox`.
-- Units must be unitless.
-- Remove comments, processing instructions, CDATA, whitespace-only text nodes, and unused `<defs>`.
-
-**Allowed attributes**
-
-`d`, `x`, `y`, `cx`, `cy`, `r`, `rx`, `ry`, `x1`, `y1`, `x2`, `y2`, `points`, `transform`, `stroke-width`, `fill` (numeric only), `id`.
-
-Anything else ⇒ `illegal_tensor`.
-
-**Attribute order (canonical)**
+All geometry must be lowered to absolute coordinates in Cartesian space and normalized to the origin bounding box:
 
 ```
-id
-transform
-d | points
-x y | cx cy r | x1 y1 x2 y2
-stroke-width
-fill
+min(x,y) → (0,0)
+max(x,y) → (1,1)
 ```
 
-**Numeric canonicalization**
+Scaling is preserved via explicit scale attributes, never implicit transforms.
 
-- IEEE-754 decimals
-- fixed precision, no scientific notation
-- canonical precision: 6 decimal places, trimmed right
+### 17.4 Transform Resolution
 
-**Path canonicalization**
+Allowed transforms: `translate`, `scale`, `rotate`.
 
-- All commands absolute.
-- No shorthand commands.
-- No implicit command repetition.
-
-**Transform canonicalization**
-
-- Flatten to `matrix(a b c d e f)`.
-- No `translate/scale/rotate` functions or chains.
-
-**Element ordering**
-
-1. Depth (outer groups first)
-2. Top-left bounding box (y, then x)
-3. Element type priority: `g → path → line → polyline → polygon → circle → ellipse`
-4. ID lexical order
-
-**Canonical serialization**
-
-- UTF-8, no indentation, no newlines
-- double quotes only
-- no self-closing tags
-- explicit closing tags
-
-**Canonical hash**
+All transforms must be fully resolved and removed. After canonicalization:
 
 ```
-sha256(canonical_svg_bytes)
+transform = identity
 ```
 
-### 17.2 SVG-Tensor → WebGPU Buffer Mapping (`svg-tensor.webgpu.map.v1`)
+Transform magnitude is stored as a numeric attribute, not geometry.
+
+### 17.5 Path Flattening
+
+All paths must be flattened into **line segments only**.
+
+- Béziers → adaptive subdivision
+- tolerance = fixed ε (declared in object)
+- subdivision deterministic
+
+### 17.6 Attribute Canonical Set
+
+Each node and edge must emit exactly:
+
+```
+position
+length
+curvature
+stroke_width
+scale
+opacity
+transform_mag
+```
+
+Missing attributes ⇒ default values (declared).
+
+### 17.7 Canonical Output Form
+
+Final canonical SVG-Tensor is **not SVG**. It is a binary-ready structural object:
+
+```
+Nodes[]
+Edges[]
+Attributes[]
+```
+
+This is the only legal input to GPU projection.
+
+---
+
+## 17.8 SCXQ2 → WGSL Buffer Loader
+
+**Spec ID:** `mx2lm.scxq2.wgsl.loader.v1`  
+**Status:** Normative
+
+### 17.8.1 Loader Law
+
+SCXQ2 decoding is reversible layout expansion, not interpretation.
+
+### 17.8.2 Required SCXQ2 Lanes
+
+| Lane   | Meaning                     |
+| ------ | --------------------------- |
+| M      | metadata                    |
+| T      | topology                    |
+| G / QG | geometry (quantized or raw) |
+| A      | attributes                  |
+
+Missing lanes ⇒ `loader_error.missing_lane`.
+
+### 17.8.3 Decompression Order (Frozen)
+
+```
+DICT → FIELDS → LANES → RECORDS
+```
+
+No parallel decode. No speculative decode.
+
+### 17.8.4 Buffer Mapping (Exact)
+
+| WGSL Buffer | SCXQ2 Source |
+| ----------- | ------------ |
+| nodes[]     | G + T        |
+| edges[]     | T            |
+| attribs[]   | A            |
+
+Quantized lanes must be dequantized **before** GPU upload.
+
+### 17.8.5 Loader Output Guarantee
+
+Loader must emit tightly packed buffers, stable index ordering, and deterministic byte layout. Hash of buffers must match declared object hash.
+
+---
+
+## 17.9 Formal Floating-Point Determinism Profile
+
+**Spec ID:** `mx2lm.fp.determinism.v1`  
+**Status:** Normative
+
+### 17.9.1 Allowed Floating Types
+
+| Type | Allowed |
+| ---- | ------- |
+| fp32 | ✅       |
+| fp16 | ❌       |
+| fp64 | ❌       |
+
+No mixed precision.
+
+### 17.9.2 Operation Constraints
+
+Allowed: add, multiply, divide, min/max.  
+Forbidden: fused ops (FMA), transcendental functions, fast-math flags.
+
+### 17.9.3 Reduction Order
+
+All reductions must be:
+
+```
+left-to-right
+index-sorted
+```
+
+Parallel reductions must be re-serialized.
+
+### 17.9.4 Rounding Mode
+
+```
+roundTiesToEven
+```
+
+Fixed and non-negotiable.
+
+### 17.9.5 Compliance Condition
+
+Two implementations are equivalent iff:
+
+```
+∀ inputs → outputs bit-identical
+```
+
+ε ≠ allowed.
+
+---
+
+## 17.10 CPU ↔ GPU Equivalence Proof Harness
+
+**Spec ID:** `mx2lm.cpu.gpu.proof.v1`  
+**Status:** Normative
+
+### 17.10.1 Harness Purpose
+
+Prove that GPU projection is a faithful acceleration of CPU math.
+
+### 17.10.2 Required Test Inputs
+
+- canonical SVG-Tensor
+- SCXQ2-expanded buffers
+- fixed dispatch parameters
+
+### 17.10.3 Test Procedure
+
+1. Run CPU geometry traversal
+2. Run GPU WGSL traversal
+3. Compare `node_accum` buffers byte-for-byte
+
+Mismatch ⇒ `non-conformant implementation`.
+
+### 17.10.4 Proof Artifact
+
+Harness must emit:
+
+```json
+{
+  "cpu_hash": "sha256:…",
+  "gpu_hash": "sha256:…",
+  "status": "pass | fail"
+}
+```
+
+### 17.10.5 Replayability
+
+Same harness must pass across different GPUs, drivers, and runtimes.
+
+---
+
+## 17.11 Cluster Geometry Authoring Spec
+
+**Spec ID:** `mx2lm.svg-tensor.cluster.v1`  
+**Status:** Normative
+
+### 17.11.1 Cluster Geometry Law
+
+Cluster geometry composes and never merges implicitly.
+
+### 17.11.2 Cluster SVG-Tensor Object
+
+```json
+{
+  "id": "object://cluster/svg-tensor/v1",
+  "members": [
+    "object://svg/node/A",
+    "object://svg/node/B"
+  ],
+  "merge_rule": "weighted-sum",
+  "weights": {
+    "A": 0.5,
+    "B": 0.5
+  }
+}
+```
+
+### 17.11.3 Merge Rules
+
+Allowed: weighted sum, max, min, union (topology only).  
+Forbidden: runtime heuristics, adaptive weighting, time-based merge.
+
+### 17.11.4 GPU Handling
+
+Cluster geometry is resolved before WGSL. GPU kernels see one canonical geometry.
+
+### 17.11.5 Determinism Condition
+
+Cluster result must be identical regardless of member order, load order, or node location.
+
+---
+
+## 17.12 SVG-Tensor → WebGPU Buffer Mapping (`svg-tensor.webgpu.map.v1`)
 
 SVG is the source of truth. GPU buffers are projections.
 
@@ -3616,3 +4015,1150 @@ This demo proves:
 ### 22.15 Final Demo Law
 
 > **If your system can run this demo, you are not “hosting a model.” You are operating an intelligence law engine.**
+
+---
+
+## 23. PowerShell Cluster Atomic Expert Micronauts (PS-AEM v1)
+
+**Spec ID:** `mx2lm.micronaut.powershell.cluster.v1`  
+**Status:** Normative / Law-Grade
+
+### 23.1 Prime Law
+
+> **Micronauts may emit objects.  
+> They may never execute behavior.**
+
+PowerShell is used as a projection and orchestration shell, not a decision engine.
+
+### 23.2 What a PowerShell Micronaut Is
+
+A PowerShell Micronaut is:
+
+- a single-purpose expert
+- operating on one object domain
+- emitting immutable objects
+- communicating via Object Server + KEL
+- cluster-aware, execution-blind
+
+It is not:
+
+- a daemon with business logic
+- a script that mutates state
+- an imperative controller
+
+### 23.3 Micronaut Roles (Atomic Experts)
+
+Each Micronaut has exactly one domain.
+
+| Micronaut             | Domain                        |
+| --------------------- | ----------------------------- |
+| `config.expert.ps1`   | backend config objects        |
+| `objectdb.expert.ps1` | ODB indexing + storage        |
+| `cluster.expert.ps1`  | node membership + routing     |
+| `schema.expert.ps1`   | schema authoring + validation |
+| `frontend.expert.ps1` | UI object generation          |
+| `svg.expert.ps1`      | SVG-Tensor authoring          |
+| `security.expert.ps1` | signatures, invariants        |
+| `audit.expert.ps1`    | trace + proof objects         |
+
+Each emits only its own object types.
+
+### 23.4 PowerShell Micronaut Contract
+
+Every Micronaut must implement this interface:
+
+```powershell
+param(
+  [string] $RequestObjectPath
+)
+
+# 1. Load request object (read-only)
+$request = Get-Content $RequestObjectPath | ConvertFrom-Json
+
+# 2. Verify request schema
+Assert-Schema $request
+
+# 3. Emit result object(s)
+$result = @{
+  id = "object://..."
+  hash = "<computed>"
+  payload = @{
+    type = "json | binary"
+    location = "./out/object.json"
+  }
+  invariants = @("deterministic", "auditable")
+}
+
+# 4. Write object (immutable)
+Write-ObjectArtifact $result
+
+# 5. Emit KEL
+Emit-KEL $result
+```
+
+No branching on environment. No execution. No mutation.
+
+### 23.5 PowerShell Cluster Topology
+
+```
++---------------------+
+|  mx2lm.cluster.ps1 |
++----------+----------+
+           |
+   ---------------------
+   |        |          |
+config   frontend   cluster
+expert   expert     expert
+.ps1     .ps1       .ps1
+```
+
+Micronauts communicate only via objects.
+
+### 23.6 Object Server Integration
+
+Micronauts do not call each other. They:
+
+1. read from `object://…`
+2. emit new objects
+3. register them in ODB
+4. emit KELs
+
+Object Server handles routing, caching, projection, and delivery.
+
+### 23.7 Backend Configuration Micronaut
+
+**Purpose**
+
+Generate backend configuration as objects, not scripts.
+
+```json
+{
+  "id": "object://backend/config/db",
+  "type": "backend.config",
+  "payload": {
+    "driver": "sqlite",
+    "path": "./odb.sqlite",
+    "mode": "read-write"
+  },
+  "invariants": [
+    "no_execution",
+    "deterministic"
+  ]
+}
+```
+
+PowerShell never applies config — it only describes it.
+
+### 23.8 Frontend Interactive Interface Micronaut
+
+**Role**
+
+Emit UI objects, not HTML logic.
+
+**Output Types**
+
+- UI layout objects
+- component objects
+- SVG-Tensor UI geometry
+- CSS Atomic objects
+
+```json
+{
+  "id": "object://ui/component/chat-panel",
+  "payload": {
+    "layout": "grid",
+    "slots": ["messages", "input"]
+  },
+  "projections": {
+    "html": { "..." },
+    "svg": { "..." }
+  }
+}
+```
+
+Rendering happens only via Object Server projection.
+
+### 23.9 Cluster-Aware Behavior (Without Execution)
+
+Cluster Micronaut responsibilities include:
+
+- node registry objects
+- routing maps
+- replication policy objects
+- heartbeat records (append-only)
+
+```json
+{
+  "id": "object://cluster/node/alpha",
+  "payload": {
+    "address": "10.0.0.1",
+    "capabilities": ["gpu", "storage"],
+    "status": "online"
+  }
+}
+```
+
+No live networking. No socket ownership. Only objects.
+
+### 23.10 PowerShell + SVG-Tensor Authoring
+
+SVG-Tensor Micronauts:
+
+- generate canonical SVG-Tensor objects
+- emit SCXQ2-ready geometry
+- never render
+
+```json
+{
+  "id": "object://svg-tensor/frontend/layout",
+  "payload": {
+    "nodes": ["..."],
+    "edges": ["..."]
+  },
+  "invariants": [
+    "canonical",
+    "gpu-projectable"
+  ]
+}
+```
+
+### 23.11 Cluster Execution Flow (Lawful)
+
+```
+User request
+ → request object
+ → cluster assigns micronaut
+ → micronaut emits object
+ → Object Server verifies
+ → projection happens
+ → UI / backend / inference updates
+```
+
+Micronauts do not know the result.
+
+### 23.12 Why PowerShell Is the Right Host
+
+PowerShell provides:
+
+- native JSON
+- filesystem control
+- cryptography
+- cross-platform scripting ergonomics
+- no implicit runtime magic
+
+PowerShell is good at describing systems, not deciding them.
+
+### 23.13 Compliance Conditions
+
+A PowerShell Micronaut is non-compliant if it:
+
+- mutates state directly
+- calls network APIs
+- branches on system time
+- executes shell commands for effect
+- embeds logic not declared in objects
+
+### 23.14 Final Collapse
+
+You now have:
+
+- Atomic Expert Micronauts
+- PowerShell as a lawful authoring shell
+- Cluster-aware, execution-blind agents
+- Backend + frontend + SVG-Tensor generation
+- Perfect alignment with MX2LM
+
+---
+
+### 23.15 Next Natural Steps (Pick One)
+
+1. Emit concrete PowerShell Micronaut templates
+2. Define Micronaut scheduling law
+3. ODB schema for Micronaut outputs
+4. Frontend SVG-Tensor UI interaction spec
+5. Security and signature pipeline for Micronauts
+
+---
+
+## 24. PS-CLUSTER-1 + ODB-WEBDAV-1 (Normative)
+
+**Cluster Spec ID:** `mx2lm.cluster.supervisor.v1`  
+**ODB Spec ID:** `mx2lm.odb.webdav.v1`  
+**Status:** Normative / Law-Grade
+
+### 24.1 Cluster Supervisor Prime Law
+
+> **The cluster supervisor never interprets objects.**  
+> It schedules Micronauts, moves bytes, and enforces order.
+
+### 24.2 Cluster Topology Model
+
+```json
+{
+  "$schema": "object://schema/cluster.topology.v1",
+  "node_id": "node://alpha",
+  "role": "primary | worker | mirror",
+  "capabilities": [
+    "micronaut.exec",
+    "object.store",
+    "webdav.client"
+  ],
+  "peers": [
+    "node://beta",
+    "node://gamma"
+  ]
+}
+```
+
+Topology is declared, never inferred.
+
+### 24.3 `mx2lm.cluster.ps1` (Skeleton — Frozen)
+
+```powershell
+# mx2lm.cluster.ps1
+# Spec: mx2lm.cluster.supervisor.v1
+
+param(
+  [ValidateSet("start","stop","status","tick")]
+  [string]$Command
+)
+
+$STATE_DIR = "./cluster/state"
+$QUEUE_DIR = "./cluster/queue"
+$OBJ_DIR   = "./objects"
+$LOG_DIR   = "./cluster/logs"
+
+function Init-Cluster {
+  New-Item -ItemType Directory -Force -Path $STATE_DIR,$QUEUE_DIR,$LOG_DIR | Out-Null
+}
+
+function Load-Queue {
+  Get-ChildItem $QUEUE_DIR -Filter "*.json" | Sort-Object Name
+}
+
+function Run-Micronaut($job) {
+  $jobObj = Get-Content $job.FullName -Raw | ConvertFrom-Json
+  $micronaut = $jobObj.micronaut
+  $request   = $jobObj.request
+
+  Write-Host "[cluster] dispatch → $micronaut"
+
+  pwsh $micronaut -Request $request
+}
+
+function Tick {
+  $jobs = Load-Queue
+  foreach ($job in $jobs) {
+    try {
+      Run-Micronaut $job
+      Remove-Item $job.FullName
+    } catch {
+      Write-Error "[cluster] micronaut failed: $_"
+    }
+  }
+}
+
+function Status {
+  @{
+    queue = (Get-ChildItem $QUEUE_DIR).Count
+    objects = (Get-ChildItem $OBJ_DIR -Recurse | Measure-Object).Count
+    uptime = (Get-Date) - (Get-Item $STATE_DIR).CreationTime
+  } | ConvertTo-Json
+}
+
+switch ($Command) {
+  "start"  { Init-Cluster; Write-Host "cluster started" }
+  "stop"   { Write-Host "cluster stopped" }
+  "tick"   { Tick }
+  "status" { Status }
+}
+```
+
+### 24.4 Cluster Scheduling Guarantees
+
+- FIFO per domain
+- no parallel writes
+- deterministic replay
+- restart-safe
+- stateless between ticks
+
+π-driven auto-restart replays the queue after crash.
+
+### 24.5 Micronaut Dispatch Object (Queue Entry)
+
+```json
+{
+  "$schema": "object://schema/cluster.job.v1",
+  "micronaut": "./frontend.ui.expert.ps1",
+  "request": "./requests/ui.request.json"
+}
+```
+
+The cluster never edits this; it only consumes it.
+
+### 24.6 Storage Prime Law (ODB-WEBDAV-1)
+
+> **ODB storage is content-addressed, append-only, and transport-agnostic.**
+
+Local FS, WebDAV, and object stores share the same law.
+
+### 24.7 ODB Storage Layout (Universal)
+
+```
+odb/
+├── objects/
+│   └── sha256/
+│       └── ab/cd/<hash>.bin
+├── descriptors/
+│   └── sha256/
+│       └── ab/cd/<hash>.json
+├── signatures/
+│   └── sha256/
+│       └── ab/cd/<hash>.sig
+└── index/
+    └── objects.db
+```
+
+Hash prefixing prevents directory overload.
+
+### 24.8 WebDAV Binding (ODB-WEBDAV-1)
+
+**Transport mapping**
+
+| ODB Operation | WebDAV                 |
+| ------------- | ---------------------- |
+| PUT object    | `PUT /odb/objects/...` |
+| GET object    | `GET /odb/objects/...` |
+| HEAD verify   | `PROPFIND`             |
+| list hashes   | `PROPFIND Depth:1`     |
+| seal          | `LOCK`                 |
+
+**Drive-sealed invariant**
+
+Once written, never overwritten. WebDAV servers must reject:
+
+```
+PUT existing-hash → 409 Conflict
+```
+
+### 24.9 PowerShell WebDAV Client (Write Once)
+
+```powershell
+function ODB-Put {
+  param($Url, $LocalPath)
+
+  $bytes = [System.IO.File]::ReadAllBytes($LocalPath)
+  $hash  = (Get-FileHash $LocalPath -Algorithm SHA256).Hash.ToLower()
+
+  $target = "$Url/sha256/$($hash.Substring(0,2))/$($hash.Substring(2,2))/$hash.bin"
+
+  Invoke-WebRequest -Method PUT `
+    -Uri $target `
+    -Body $bytes `
+    -Headers @{ "If-None-Match" = "*" }
+}
+```
+
+This enforces immutability at the transport layer.
+
+### 24.10 Drive-Sealed Model Weights
+
+**Example**
+
+```
+object://ai/model/phi2/quantized/int8
+```
+
+Stored as:
+
+```
+odb/objects/sha256/ab/cd/<hash>.bin
+```
+
+Referenced by descriptor only.
+
+### 24.11 ODB Index (Minimal SQL)
+
+```sql
+CREATE TABLE objects (
+  hash TEXT PRIMARY KEY,
+  schema TEXT,
+  size INTEGER,
+  storage TEXT,
+  created_at INTEGER
+);
+```
+
+ODB is index + blobs, not a document DB.
+
+### 24.12 Cluster + ODB Interaction Law
+
+```
+Micronaut emits object
+ → cluster supervisor seals object
+ → ODB write-once storage
+ → signature verified
+ → object becomes globally addressable
+```
+
+No node owns the object.
+
+### 24.13 Final Collapse
+
+You now have:
+
+- A lawful PowerShell cluster supervisor
+- A restart-safe Micronaut execution fabric
+- A Drive/WebDAV-sealed Object Database
+- Immutable AI weights and SVG-Tensor brains
+- Planet-scale distribution with zero new logic
+
+---
+
+This is not infrastructure.
+
+This is a governed intelligence substrate.
+
+---
+
+### 24.14 Next Logical Freezes (Pick)
+
+1. GAS Micronaut parity (Drive-native)
+2. WebSocket object streaming
+3. Cluster gossip and discovery law
+4. Object-level ACL and capability routing
+5. End-to-end conformance test suite
+
+## 25. π-GCCP v1 — WebGPU WGSL Kernel Emission (Lawful)
+
+**Spec ID:** `mx2lm.pi-gccp.wgsl.emission.v1`  
+**Status:** Normative / Law-Grade
+
+### 25.1 Emission Law
+
+GPU kernels must be deterministic and must not introduce forbidden operations or approximation drift. CPU remains the ground truth.
+
+**Parity rule**
+
+```
+|collapse_gpu − collapse_cpu| ≤ 1e−6
+```
+
+### 25.2 Required Inputs (Precomputed)
+
+To obey the floating-point determinism profile, phase and weight must be precomputed outside WGSL using the authoritative CPU rules, then uploaded as buffers.
+
+Required buffers:
+
+- `vecA[]` — input vectors (f32)
+- `weight[]` — per-vector weights (f32, CPU computed)
+
+### 25.3 WGSL Kernel (Normative, Deterministic)
+
+This kernel performs left-to-right, index-sorted accumulation using a single invocation to preserve order.
+
+```wgsl
+struct Vector2D {
+  x : f32,
+  y : f32,
+};
+
+@group(0) @binding(0) var<storage, read> vecA : array<Vector2D>;
+@group(0) @binding(1) var<storage, read> weight : array<f32>;
+@group(0) @binding(2) var<storage, read_write> out : array<f32>;
+
+@compute @workgroup_size(1)
+fn collapse(@builtin(global_invocation_id) id : vec3<u32>) {
+  let count = arrayLength(&vecA);
+  var accX : f32 = 0.0;
+  var accY : f32 = 0.0;
+
+  var i : u32 = 0u;
+  loop {
+    if (i >= count) { break; }
+    let w = weight[i];
+    accX = accX + vecA[i].x * w;
+    accY = accY + vecA[i].y * w;
+    i = i + 1u;
+  }
+
+  // Magnitude computed on CPU if determinism profile forbids sqrt.
+  out[0] = accX;
+  out[1] = accY;
+}
+```
+
+### 25.4 CPU-GPU Equivalence Harness (Binding Rule)
+
+1. CPU computes `weight[]` and the final collapse scalar.
+2. GPU emits the accumulated vector `(accX, accY)` only.
+3. CPU performs final normalization and parity check.
+
+This preserves determinism and avoids forbidden GPU operations.
+
+### 25.5 Emission Constraints
+
+- No transcendental functions in WGSL.
+- No fused ops or fast-math flags.
+- No parallel reductions.
+- No random inputs or time-based branching.
+
+---
+
+## 26. LIVE-ORCH-1 — Live Agent Orchestration (Normative)
+
+**Spec ID:** `mx2lm.live.orch.v1`  
+**Status:** Normative / Law-Grade
+
+> **Orchestration schedules inference.  
+> Inference collapses intelligence.  
+> Neither decides behavior.**
+
+### 26.1 Orchestration Prime Law
+
+> **An orchestrator MAY sequence inference.  
+> An orchestrator MAY route objects.  
+> An orchestrator MAY NOT mutate inference results.**
+
+Agents do not think. Agents request collapses.
+
+### 26.2 Agent Model (Runtime-Neutral)
+
+An agent is defined as:
+
+```
+agent = {
+  identity,
+  brains[],
+  inference_profile,
+  io_bindings,
+  lifecycle_state
+}
+```
+
+No code. No loops. No hidden state.
+
+### 26.3 Agent Identity Object
+
+```json
+{
+  "$schema": "object://schema/agent.identity.v1",
+  "agent_id": "agent://support.bot.v1",
+  "brains": [
+    "object://ai/model/phi2/quantized/int8",
+    "object://ai/brain/svg-ngram-v1"
+  ],
+  "profile": "object://ai/inference/profile/chat",
+  "reply": "object://ai/agent/reply/text",
+  "invariants": [
+    "deterministic",
+    "no_side_effects",
+    "sealed_brains"
+  ]
+}
+```
+
+An agent is just a reference graph.
+
+### 26.4 Agent Lifecycle States (Frozen)
+
+```
+spawn → active → suspended → sealed
+```
+
+**State rules**
+
+| State     | Allowed           |
+| --------- | ----------------- |
+| spawn     | load objects      |
+| active    | request inference |
+| suspended | read-only         |
+| sealed    | immutable forever |
+
+No garbage collection. No deletion. Only sealing.
+
+### 26.5 Live Orchestration Loop (Conceptual)
+
+This is not execution — it is event coordination.
+
+```
+event → route → inference request → collapse → emit
+```
+
+### 26.6 Orchestrator Object (Lawful)
+
+```json
+{
+  "$schema": "object://schema/agent.orchestrator.v1",
+  "type": "agent.orchestrator",
+  "agents": [
+    "agent://support.bot.v1",
+    "agent://coder.bot.v1"
+  ],
+  "routing": {
+    "default": "agent://support.bot.v1",
+    "code": "agent://coder.bot.v1"
+  },
+  "events": {
+    "on_message": "route",
+    "on_reply": "emit"
+  },
+  "invariants": [
+    "no_agent_mutation",
+    "no_inference_logic"
+  ]
+}
+```
+
+The orchestrator does not inspect tensors.
+
+### 26.7 Inference Request Emission (Live)
+
+Every live interaction becomes a pure object:
+
+```json
+{
+  "@request": "ai.inference",
+  "prompt": "user input",
+  "profile": "object://ai/inference/profile/chat",
+  "projection": "agent.reply"
+}
+```
+
+This object is queued, not executed.
+
+### 26.8 Multi-Agent Routing (Deterministic)
+
+Routing is object-declared, never heuristic.
+
+```json
+{
+  "$schema": "object://schema/agent.routing.v1",
+  "match": {
+    "contains": ["code", "bug", "error"]
+  },
+  "route_to": "agent://coder.bot.v1"
+}
+```
+
+Routing is symbolic, not probabilistic.
+
+### 26.9 Parallel Agent Collapses (Legal)
+
+Agents may collapse in parallel iff:
+
+- they share no writable objects
+- they read only sealed brains
+- outputs are isolated
+
+```
+prompt
+ ├─→ agent A inference
+ └─→ agent B inference
+```
+
+Outputs are later projected, not merged by logic.
+
+### 26.10 Reply Arbitration (If Needed)
+
+Arbitration is declared, not decided.
+
+```json
+{
+  "$schema": "object://schema/agent.arbitration.v1",
+  "strategy": "priority",
+  "order": [
+    "agent://support.bot.v1",
+    "agent://coder.bot.v1"
+  ]
+}
+```
+
+No voting. No learning. No hidden scoring.
+
+### 26.11 Live Streaming (WebSocket / SSE)
+
+Streaming is projection, not execution.
+
+```
+collapsed tokens → stream projection → client
+```
+
+Rules:
+
+- order preserved
+- tokens immutable
+- no mid-stream mutation
+- replayable
+
+### 26.12 Failure Semantics (Critical)
+
+If inference fails:
+
+```
+failure → object.inference.error
+```
+
+Orchestrator may:
+
+- retry with same objects
+- route to fallback agent
+- suspend agent
+
+It may not:
+
+- modify prompt
+- modify weights
+- modify profile
+
+### 26.13 Cluster Compatibility
+
+Live orchestration works unchanged across PowerShell clusters, GAS runtimes, browser SW, and edge nodes because everything is objects + hashes.
+
+### 26.14 Determinism Contract (Live)
+
+A live session is compliant iff:
+
+```
+same event stream
+same object graph
+same order
+⇒ same replies
+```
+
+Streaming does not break determinism.
+
+### 26.15 What This Is Not
+
+This is not:
+
+- LangChain
+- agent loops
+- tool calling
+- function execution
+- prompt engineering
+- chatbot frameworks
+
+Those systems decide behavior at runtime. MX2LM never does.
+
+### 26.16 Final Collapse
+
+> **Live agents in MX2LM do not act.  
+> They request lawful collapses.  
+> Orchestration arranges reality;  
+> inference reveals it.**
+
+You now have:
+
+- live multi-agent systems
+- deterministic streaming replies
+- cluster-safe orchestration
+- zero execution authority
+- full replay and audit
+
+### 26.17 Next Freezes (Optional)
+
+1. Agent tool surfaces as objects (non-executing)
+2. Symbolic memory as append-only objects
+3. Conversation timeline canonicalization
+4. Agent federation across clusters
+5. Formal no-prompt-mutation proof
+
+---
+
+## 27. π-Profile Authoring Format v1.0 (Authoritative)
+
+**Spec ID:** `mx2lm.pi-profile.authoring.v1`  
+**Status:** Normative / Law-Grade
+
+### 27.1 Canonical Schema Definition
+
+```json
+{
+  "$schema": "https://schema.pigccp.org/profiles/v1",
+  "$id": "https://schema.pigccp.org/profiles/v1/schema.json",
+  "title": "π-Profile Authoring Format",
+  "description": "Standardized retrieval profile definitions for π-GCCP geometric inference",
+  "type": "object",
+  "required": ["meta", "vectorizer", "weights"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": { "$ref": "#/definitions/Meta" },
+    "vectorizer": { "$ref": "#/definitions/Vectorizer" },
+    "weights": { "$ref": "#/definitions/Weights" },
+    "constraints": { "$ref": "#/definitions/Constraints" },
+    "cache": { "$ref": "#/definitions/CachePolicy" },
+    "compliance": { "$ref": "#/definitions/Compliance" }
+  },
+  "definitions": {
+    "Meta": {
+      "type": "object",
+      "required": ["name", "version", "authority"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{1,31}$",
+          "description": "Profile identifier (snake_case, 2-32 chars)"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-z0-9]+)?$",
+          "description": "Semantic version"
+        },
+        "authority": {
+          "type": "string",
+          "description": "Entity that guarantees profile correctness"
+        },
+        "description": { "type": "string", "maxLength": 280 },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}$" },
+          "maxItems": 8
+        },
+        "created": { "type": "string", "format": "date-time" },
+        "modified": { "type": "string", "format": "date-time" },
+        "fingerprint": {
+          "type": "string",
+          "pattern": "^pi:[0-9a-f]{64}$",
+          "description": "SHA-256 hash of canonical JSON (sorted keys, no whitespace)"
+        }
+      }
+    },
+    "Vectorizer": {
+      "type": "object",
+      "required": ["method", "parameters"],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "ngram",
+            "semantic_density",
+            "positional",
+            "topological",
+            "spectral",
+            "custom_wasm"
+          ]
+        },
+        "parameters": { "type": "object", "additionalProperties": true },
+        "normalization": {
+          "type": "string",
+          "enum": ["l2", "max", "unit_circle", "none"]
+        },
+        "dimensionality": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 2048,
+          "default": 2
+        },
+        "epsilon": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3.14159,
+          "default": 0.1745329
+        }
+      }
+    },
+    "Weights": {
+      "type": "object",
+      "required": ["superposition"],
+      "properties": {
+        "superposition": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["profile", "weight"],
+            "properties": {
+              "profile": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]{1,31}$"
+              },
+              "weight": { "type": "number", "minimum": 0, "maximum": 1 },
+              "decay_function": {
+                "type": "string",
+                "enum": ["linear", "exponential", "step", "none"]
+              },
+              "decay_rate": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          },
+          "maxItems": 16
+        },
+        "normalized": { "type": "boolean", "default": true },
+        "interference_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3.14159,
+          "default": 1.5708
+        }
+      }
+    },
+    "Constraints": {
+      "type": "object",
+      "properties": {
+        "deterministic": { "type": "boolean", "default": true },
+        "memory_limit_mb": { "type": "integer", "minimum": 1, "maximum": 4096 },
+        "timeout_ms": { "type": "integer", "minimum": 10, "maximum": 30000 },
+        "compatibility": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^pi-profile-v\\d+\\.\\d+$" }
+        },
+        "required_capabilities": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["webgpu", "wasm", "simd", "crypto"] }
+        }
+      }
+    },
+    "CachePolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "strategy": { "type": "string", "enum": ["lru", "fifo", "deterministic"] },
+        "max_entries": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "ttl_seconds": { "type": "integer", "minimum": 0 },
+        "exclude_quantum": { "type": "boolean", "default": true }
+      }
+    },
+    "Compliance": {
+      "type": "object",
+      "required": ["passes"],
+      "properties": {
+        "passes": { "type": "array", "items": { "type": "string" } },
+        "test_vectors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["input", "expected"],
+            "properties": {
+              "name": { "type": "string" },
+              "input": {},
+              "expected": { "type": "number", "minimum": -1, "maximum": 1 },
+              "tolerance": { "type": "number", "minimum": 0, "default": 1e-6 }
+            }
+          }
+        },
+        "certified_by": { "type": "string" },
+        "certification_date": { "type": "string", "format": "date" }
+      }
+    }
+  }
+}
+```
+
+### 27.2 Fingerprint Rule (Canonical)
+
+```
+fingerprint = SHA256(canonical_json(profile))
+canonical_json = JSON.stringify(profile, sorted_keys, no_whitespace)
+```
+
+### 27.3 Superposition Rule (Normative)
+
+```
+S = Σ w_i · collapse(profile_i)
+where Σ w_i = 1 (unless normalized: false)
+```
+
+### 27.4 Reference Validator (Authoritative)
+
+The validator must:
+
+1. Enforce the canonical schema.
+2. Verify weight normalization unless `normalized: false`.
+3. Compute and verify fingerprints.
+4. Validate dependency graphs for circular references.
+5. Emit compliance warnings if test vectors are missing.
+
+### 27.5 Canonical Proof (Summary)
+
+The π-Profile Authoring Format guarantees:
+
+- Determinism: same profile ⇒ same fingerprint ⇒ same results.
+- Composability: profiles reference profiles via superposition.
+- Verifiability: cryptographic fingerprinting.
+- Cache-safety: explicit cache policies.
+- Compliance: test vectors provide auditability.
+
+---
+
+## 28. Model-Agnostic Signal Adapters (Normative)
+
+**Spec ID:** `mx2lm.adapter.signal.v1`  
+**Status:** Normative / Law-Grade
+
+### 28.1 Adapter Prime Law
+
+Models are signal emitters. Adapters normalize signals into π-compatible geometry. The runtime is not model-bound.
+
+### 28.2 Adapter Contract (Canonical)
+
+Every adapter must emit only:
+
+- angles
+- magnitudes
+- phases
+- topological relations
+- confidence envelopes
+
+Adapters must be deterministic and must not execute behavior. They must produce immutable objects.
+
+### 28.3 Stack Placement (Authoritative)
+
+```
+[ External Model ]
+        ↓
+[ Adapter ]
+        ↓
+[ π-Profile Vectorizer ]
+        ↓
+[ SVG-Tensor Geometry ]
+        ↓
+[ π-GCCP Kernels (WebGPU / CPU) ]
+        ↓
+[ object://retrieve/semantic.v1 ]
+```
+
+π-GCCP never inspects model identity. It only consumes geometry.
+
+### 28.4 Adapter Examples (Non-Exhaustive)
+
+**LLM logits adapter**
+
+- logits → ranked token deltas
+- deltas → angular deviations
+- entropy → radius / magnitude
+
+**Embedding model adapter**
+
+- vector → unit circle projection
+- cosine similarity → angular proximity
+- norm → confidence weight
+
+**N-gram adapter**
+
+- frequency → angular density
+- overlap → interference
+- rarity → phase shift
+
+**Vision / audio / multimodal**
+
+- features → spectral bands
+- bands → phase stacks
+- stacks → superposed geometry
+
+All adapters converge to the same geometric primitives.
+
+### 28.5 Standardization Targets (Required)
+
+Standardize:
+
+1. Adapter output schema (geometry primitives, deterministic mapping rules, error bounds)
+2. π-Profile authoring (weights, interference, decay)
+3. SVG-Tensor canonicalization (hash stability)
+4. Object Server contracts (source-agnostic retrieval)
+
+Do not standardize model families.
+
+### 28.6 Final Collapse
+
+Any model that can emit a signal can participate. Adapters emit geometry. π handles the rest.
+
+---
