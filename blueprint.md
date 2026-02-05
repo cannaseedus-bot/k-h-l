@@ -2165,198 +2165,263 @@ SVG-Tensors must not be interpreted visually by default. Rendering is optional, 
 
 ---
 
-## 17. SVG-Tensor Canonicalization + WebGPU Mapping (Normative)
+## 17. SVG-Tensor Canonicalization Rules (v1)
 
-This section defines the canonical byte form for SVG-Tensors and the normative GPU buffer mapping. Deviations are non-compliant.
+**Spec ID:** `mx2lm.svg-tensor.canonical.v1`  
+**Status:** Normative / Frozen
 
-### 17.1 SVG-Tensor Canonicalization (`svg-tensor.canonical.v1`)
+### 17.1 Prime Law
 
-Canonicalization defines the single authoritative byte stream for hashing, verification, compression, and GPU lowering.
+Canonicalization removes representation variance, not meaning. Two SVG-Tensors are equivalent **iff** their canonical forms are byte-identical.
 
-**Canonicalization goals**
+### 17.2 Accepted SVG Subset
 
-- identical geometry ⇒ identical bytes
-- identical bytes ⇒ identical hash
-- environment-independent meaning
-- compression safety
-- GPU-stable lowering
+Only these SVG elements are legal inputs:
 
-**Pipeline (fixed order)**
+- `<svg>`
+- `<g>`
+- `<path>`
+- `<line>`
+- `<circle>`
+- `<rect>`
 
-```
-raw SVG
-  ↓
-parse XML
-  ↓
-strip illegal elements
-  ↓
-normalize structure
-  ↓
-normalize attributes
-  ↓
-normalize numeric values
-  ↓
-normalize transforms
-  ↓
-canonical ordering
-  ↓
-canonical serialization
-  ↓
-hash
-```
+All others ⇒ `canonicalization_error.unsupported_element`.
 
-**Structural normalization**
+### 17.3 Coordinate Normalization
 
-- Exactly one `<svg>` root.
-- Explicit `width`, `height`, and `viewBox`.
-- Units must be unitless.
-- Remove comments, processing instructions, CDATA, whitespace-only text nodes, and unused `<defs>`.
-
-**Allowed attributes**
-
-`d`, `x`, `y`, `cx`, `cy`, `r`, `rx`, `ry`, `x1`, `y1`, `x2`, `y2`, `points`, `transform`, `stroke-width`, `fill` (numeric only), `id`.
-
-Anything else ⇒ `illegal_tensor`.
-
-**Attribute order (canonical)**
+All geometry must be lowered to absolute coordinates in Cartesian space and normalized to the origin bounding box:
 
 ```
-id
-transform
-d | points
-x y | cx cy r | x1 y1 x2 y2
-stroke-width
-fill
+min(x,y) → (0,0)
+max(x,y) → (1,1)
 ```
 
-**Numeric canonicalization**
+Scaling is preserved via explicit scale attributes, never implicit transforms.
 
-- IEEE-754 decimals
-- fixed precision, no scientific notation
-- canonical precision: 6 decimal places, trimmed right
+### 17.4 Transform Resolution
 
-**Path canonicalization**
+Allowed transforms: `translate`, `scale`, `rotate`.
 
-- All commands absolute.
-- No shorthand commands.
-- No implicit command repetition.
-
-**Transform canonicalization**
-
-- Flatten to `matrix(a b c d e f)`.
-- No `translate/scale/rotate` functions or chains.
-
-**Element ordering**
-
-1. Depth (outer groups first)
-2. Top-left bounding box (y, then x)
-3. Element type priority: `g → path → line → polyline → polygon → circle → ellipse`
-4. ID lexical order
-
-**Canonical serialization**
-
-- UTF-8, no indentation, no newlines
-- double quotes only
-- no self-closing tags
-- explicit closing tags
-
-**Canonical hash**
+All transforms must be fully resolved and removed. After canonicalization:
 
 ```
-sha256(canonical_svg_bytes)
+transform = identity
 ```
 
-### 17.2 SVG-Tensor → WebGPU Buffer Mapping (`svg-tensor.webgpu.map.v1`)
+Transform magnitude is stored as a numeric attribute, not geometry.
 
-SVG is the source of truth. GPU buffers are projections.
+### 17.5 Path Flattening
 
-**Buffer classes**
+All paths must be flattened into **line segments only**.
 
-| Buffer         | Purpose              |
-| -------------- | -------------------- |
-| `nodeBuffer`   | Nodes / vertices     |
-| `edgeBuffer`   | Connectivity         |
-| `weightBuffer` | Weights / magnitudes |
-| `metaBuffer`   | Shape + offsets      |
+- Béziers → adaptive subdivision
+- tolerance = fixed ε (declared in object)
+- subdivision deterministic
 
-**Node buffer (`Float32Array`)**
+### 17.6 Attribute Canonical Set
+
+Each node and edge must emit exactly:
 
 ```
-struct Node {
-  float x;
-  float y;
-  float z;    // 0.0 for 2D
-  float rank; // depth in group tree
+position
+length
+curvature
+stroke_width
+scale
+opacity
+transform_mag
+```
+
+Missing attributes ⇒ default values (declared).
+
+### 17.7 Canonical Output Form
+
+Final canonical SVG-Tensor is **not SVG**. It is a binary-ready structural object:
+
+```
+Nodes[]
+Edges[]
+Attributes[]
+```
+
+This is the only legal input to GPU projection.
+
+---
+
+## 17.8 SCXQ2 → WGSL Buffer Loader
+
+**Spec ID:** `mx2lm.scxq2.wgsl.loader.v1`  
+**Status:** Normative
+
+### 17.8.1 Loader Law
+
+SCXQ2 decoding is reversible layout expansion, not interpretation.
+
+### 17.8.2 Required SCXQ2 Lanes
+
+| Lane   | Meaning                     |
+| ------ | --------------------------- |
+| M      | metadata                    |
+| T      | topology                    |
+| G / QG | geometry (quantized or raw) |
+| A      | attributes                  |
+
+Missing lanes ⇒ `loader_error.missing_lane`.
+
+### 17.8.3 Decompression Order (Frozen)
+
+```
+DICT → FIELDS → LANES → RECORDS
+```
+
+No parallel decode. No speculative decode.
+
+### 17.8.4 Buffer Mapping (Exact)
+
+| WGSL Buffer | SCXQ2 Source |
+| ----------- | ------------ |
+| nodes[]     | G + T        |
+| edges[]     | T            |
+| attribs[]   | A            |
+
+Quantized lanes must be dequantized **before** GPU upload.
+
+### 17.8.5 Loader Output Guarantee
+
+Loader must emit tightly packed buffers, stable index ordering, and deterministic byte layout. Hash of buffers must match declared object hash.
+
+---
+
+## 17.9 Formal Floating-Point Determinism Profile
+
+**Spec ID:** `mx2lm.fp.determinism.v1`  
+**Status:** Normative
+
+### 17.9.1 Allowed Floating Types
+
+| Type | Allowed |
+| ---- | ------- |
+| fp32 | ✅       |
+| fp16 | ❌       |
+| fp64 | ❌       |
+
+No mixed precision.
+
+### 17.9.2 Operation Constraints
+
+Allowed: add, multiply, divide, min/max.  
+Forbidden: fused ops (FMA), transcendental functions, fast-math flags.
+
+### 17.9.3 Reduction Order
+
+All reductions must be:
+
+```
+left-to-right
+index-sorted
+```
+
+Parallel reductions must be re-serialized.
+
+### 17.9.4 Rounding Mode
+
+```
+roundTiesToEven
+```
+
+Fixed and non-negotiable.
+
+### 17.9.5 Compliance Condition
+
+Two implementations are equivalent iff:
+
+```
+∀ inputs → outputs bit-identical
+```
+
+ε ≠ allowed.
+
+---
+
+## 17.10 CPU ↔ GPU Equivalence Proof Harness
+
+**Spec ID:** `mx2lm.cpu.gpu.proof.v1`  
+**Status:** Normative
+
+### 17.10.1 Harness Purpose
+
+Prove that GPU projection is a faithful acceleration of CPU math.
+
+### 17.10.2 Required Test Inputs
+
+- canonical SVG-Tensor
+- SCXQ2-expanded buffers
+- fixed dispatch parameters
+
+### 17.10.3 Test Procedure
+
+1. Run CPU geometry traversal
+2. Run GPU WGSL traversal
+3. Compare `node_accum` buffers byte-for-byte
+
+Mismatch ⇒ `non-conformant implementation`.
+
+### 17.10.4 Proof Artifact
+
+Harness must emit:
+
+```json
+{
+  "cpu_hash": "sha256:…",
+  "gpu_hash": "sha256:…",
+  "status": "pass | fail"
 }
 ```
 
-Mapping rules: each primitive emits ≥1 node; path commands emit nodes per segment; group depth increments `rank`.
+### 17.10.5 Replayability
 
-**Edge buffer (`Uint32Array`)**
+Same harness must pass across different GPUs, drivers, and runtimes.
 
-```
-struct Edge {
-  uint from;
-  uint to;
+---
+
+## 17.11 Cluster Geometry Authoring Spec
+
+**Spec ID:** `mx2lm.svg-tensor.cluster.v1`  
+**Status:** Normative
+
+### 17.11.1 Cluster Geometry Law
+
+Cluster geometry composes and never merges implicitly.
+
+### 17.11.2 Cluster SVG-Tensor Object
+
+```json
+{
+  "id": "object://cluster/svg-tensor/v1",
+  "members": [
+    "object://svg/node/A",
+    "object://svg/node/B"
+  ],
+  "merge_rule": "weighted-sum",
+  "weights": {
+    "A": 0.5,
+    "B": 0.5
+  }
 }
 ```
 
-Mapping rules: path adjacency ⇒ edges; polyline ⇒ sequential edges; closed paths ⇒ explicit cycle edge; disconnected nodes ⇒ illegal tensor.
+### 17.11.3 Merge Rules
 
-**Weight buffer (`Float32Array`)**
+Allowed: weighted sum, max, min, union (topology only).  
+Forbidden: runtime heuristics, adaptive weighting, time-based merge.
 
-```
-struct Weight {
-  float magnitude;  // length / area
-  float confidence; // stroke-width
-  float gradient;   // curvature
-}
-```
+### 17.11.4 GPU Handling
 
-Mapping rules: path length → magnitude; stroke width → confidence; curvature → gradient; transform scale → multiplicative weight.
+Cluster geometry is resolved before WGSL. GPU kernels see one canonical geometry.
 
-**Meta buffer (`Uint32Array`)**
+### 17.11.5 Determinism Condition
 
-```
-struct Meta {
-  uint nodeCount;
-  uint edgeCount;
-  uint topology; // enum
-  uint flags;    // invariants bitmask
-}
-```
-
-**Deterministic indexing**
-
-- Assign indices after canonical ordering.
-- Sequential, never reused.
-- Never reordered by GPU.
-
-**Binding constraints**
-
-Allowed: `STORAGE`, `UNIFORM`, `COPY_SRC`, `COPY_DST`.  
-Forbidden: `MAP_WRITE`, `INDIRECT`.
-
-**Shader constraints**
-
-- Pure, deterministic shaders only.
-- No time-based branching.
-- No buffer writes.
-- No randomness.
-
-**Round-trip invariant**
-
-```
-SVG
- → canonicalize
- → GPU buffers
- → inverse projection
- = same canonical SVG
-```
-
-**Final law statement**
-
-> **SVG-Tensors are geometry frozen into law. GPUs may read them. Runtimes may project them. Nothing may reinterpret them.**
+Cluster result must be identical regardless of member order, load order, or node location.
 
 ---
 
