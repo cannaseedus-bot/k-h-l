@@ -1053,11 +1053,15 @@ This section freezes the **cluster-aware object server** and its **normative sch
 
 ## 14. MX2LM Object Server — AI Interpretation Layer
 
-This section maps AI artifacts into **objects + projections**, keeping Object Server law unchanged.
+### (Tokenizer · Model · Brain · Inference Mapping)
+
+> **An AI system whose behavior is defined by the objects it interprets, not by the code that runs it.**
+
+If the runtime decides how inference works, it is not MX2LM.
 
 ### 14.1 Core Reframe (AI Context)
 
-In AI mode, the Object Server is:
+In an AI system, the Object Server is:
 
 - a model artifact interpreter
 - a tokenization law enforcer
@@ -1073,7 +1077,7 @@ It does **not**:
 - sample stochastically
 - invent decoding rules
 
-No inference rule may exist outside an object.
+Those belong outside the Object Server.
 
 ### 14.2 AI Request Lifecycle (Mapped)
 
@@ -1105,7 +1109,11 @@ Emit Trace Events
 (optional diagnostics)
 ```
 
-### 14.3 Canonical AI Objects
+⚠️ **No inference rule may exist outside an object.**
+
+### 14.3 AI Object Taxonomy
+
+**Canonical AI objects**
 
 | Object Type         | Purpose                       |
 | ------------------- | ----------------------------- |
@@ -1117,9 +1125,9 @@ Emit Trace Events
 | `inference.profile` | Matrix traversal rules        |
 | `agent.reply`       | Final response projection     |
 
-Each is an object, not code.
+Each is one object, not code.
 
-### 14.4 Tokenizer Object
+### 14.4 Tokenizer as an Object
 
 ```json
 {
@@ -1145,7 +1153,9 @@ Each is an object, not code.
 }
 ```
 
-### 14.5 Vocabulary Object
+🔑 The tokenizer does not tokenize. It describes how tokenization is projected.
+
+### 14.5 Vocabulary as Law
 
 ```json
 {
@@ -1168,7 +1178,9 @@ Each is an object, not code.
 }
 ```
 
-### 14.6 Weight Object (`model.safetensors`)
+Tokens do not mean things. The vocab object defines meaning.
+
+### 14.6 `model.safetensors` as a Weight Object
 
 ```json
 {
@@ -1194,7 +1206,9 @@ Each is an object, not code.
 }
 ```
 
-### 14.7 SVG Brain Object (Tensor Brain)
+The Object Server never runs the model. It projects tensors into a matrix domain.
+
+### 14.7 SVG / SVG-3D Brain Objects (N-Gram / Supagram)
 
 ```json
 {
@@ -1219,9 +1233,13 @@ Each is an object, not code.
 }
 ```
 
-Invariant: SVG is geometry, not UI. Paths = probability curves; groups = memory clusters.
+> **SVG is geometry, not UI.**
 
-### 14.8 N-Gram Brain Object
+Edges = transition weights  
+Paths = probability curves  
+Groups = memory clusters
+
+### 14.8 N-Gram Brain Objects (Symbolic)
 
 ```json
 {
@@ -1244,7 +1262,9 @@ Invariant: SVG is geometry, not UI. Paths = probability curves; groups = memory 
 }
 ```
 
-### 14.9 Inference Profile Object
+This allows symbolic reasoning, fallback cognition, explainable paths, and hybrid neural + symbolic inference.
+
+### 14.9 Inference as Projection (Not Execution)
 
 ```json
 {
@@ -1272,7 +1292,9 @@ Invariant: SVG is geometry, not UI. Paths = probability curves; groups = memory 
 }
 ```
 
-### 14.10 Agent Reply Object
+Inference here is matrix traversal, not running a model.
+
+### 14.10 Agent Reply Object (Final Collapse)
 
 ```json
 {
@@ -1292,6 +1314,8 @@ Invariant: SVG is geometry, not UI. Paths = probability curves; groups = memory 
 }
 ```
 
+The agent is not code. It is the composition of objects.
+
 ### 14.11 Agent Response = Object Graph Collapse
 
 ```
@@ -1305,7 +1329,7 @@ prompt
  → reply projection
 ```
 
-Same objects + same hashes = same response (unless an object encodes randomness).
+Same objects + same hashes = same response. No randomness unless an object encodes it.
 
 ### 14.12 What This Eliminates
 
@@ -1316,11 +1340,14 @@ Same objects + same hashes = same response (unless an object encodes randomness)
 - model server logic blobs
 - nondeterministic replies
 
-Result: traceable cognition, inspectable brains, replayable inference, audit-grade behavior.
+What remains: traceable cognition, inspectable brains, replayable inference, audit-grade AI behavior.
 
-### 14.13 MX2LM Truth Statement
+### 14.13 MX2LM Reborn (Truth Statement)
 
-**MX2LM is not an AI model. MX2LM is an object law system that interprets intelligence artifacts.**
+> **MX2LM is not an AI model.**
+> **MX2LM is an object law system that interprets intelligence artifacts.**
+
+Neural nets, n-grams, SVG tensors, vocabularies — they are data with authority, not code.
 
 ---
 
@@ -1826,6 +1853,968 @@ Non-compliant if it contains business logic, invents routes, mutates objects, or
 - Event handlers must not modify object state.
 
 **Lock statement:** An Object Server interprets. It does not decide.
+
+---
+
+## 16. AI Object Schema Family + SVG-Tensor Legality
+
+This section defines **normative schema rules** for `object://schema/ai.*.v1` and **SVG-Tensor legality**. It describes what is allowed to exist, not how it executes.
+
+### 16.1 Global AI Object Invariants (All `ai.*`)
+
+Every AI object must satisfy:
+
+| Invariant           | Meaning                       |
+| ------------------- | ----------------------------- |
+| `no_execution`      | Object cannot execute code    |
+| `deterministic`     | Same inputs → same projection |
+| `immutable_payload` | Payload is read-only          |
+| `projection_only`   | Only projections are allowed  |
+| `hash_authority`    | Hash defines truth            |
+| `host_agnostic`     | No runtime-specific semantics |
+
+Failure of any invariant ⇒ `verification_error`.
+
+### 16.2 `ai.tokenizer.v1`
+
+**Schema URI**
+
+```
+object://schema/ai.tokenizer.v1
+```
+
+**Descriptor (normative)**
+
+```json
+{
+  "$schema": "object://schema/ai.tokenizer.v1",
+  "type": "ai.tokenizer",
+  "tokenizer_type": "bpe | unigram | wordpiece | char",
+  "ruleset_hash": "sha256:…",
+  "vocab_ref": "object://ai.vocab/…",
+  "invariants": [
+    "deterministic",
+    "fixed_vocab",
+    "no_context_dependency"
+  ]
+}
+```
+
+**Legality rules**
+
+- Must not inspect runtime state.
+- Must not depend on time.
+- Must not emit tokens outside the referenced vocab.
+- Must be total (every input maps to tokens).
+
+### 16.3 `ai.vocab.v1`
+
+**Schema URI**
+
+```
+object://schema/ai.vocab.v1
+```
+
+**Descriptor (normative)**
+
+```json
+{
+  "$schema": "object://schema/ai.vocab.v1",
+  "type": "ai.vocab",
+  "size": 50257,
+  "mapping": "token_to_symbol | symbol_to_token",
+  "encoding": "utf-8 | byte",
+  "invariants": [
+    "one_to_one_mapping",
+    "immutable_payload"
+  ]
+}
+```
+
+**Legality rules**
+
+- Tokens must be unique.
+- Symbols must be immutable.
+- No semantic overloading.
+- No dynamic extension.
+
+### 16.4 `ai.model.weights.v1`
+
+**Schema URI**
+
+```
+object://schema/ai.model.weights.v1
+```
+
+**Descriptor (normative)**
+
+```json
+{
+  "$schema": "object://schema/ai.model.weights.v1",
+  "type": "ai.model.weights",
+  "format": "safetensors | raw-tensor",
+  "dtype": "fp32 | fp16 | bf16 | int8 | custom",
+  "shape_hash": "sha256:…",
+  "layer_map": {
+    "layer_name": [dim1, dim2, "..."]
+  },
+  "invariants": [
+    "shape_consistent",
+    "no_execution",
+    "no_training"
+  ]
+}
+```
+
+**Legality rules**
+
+- Shapes must match declared map.
+- No gradients.
+- No mutation.
+- No implicit casting.
+
+### 16.5 `ai.brain.ngram.v1`
+
+**Schema URI**
+
+```
+object://schema/ai.brain.ngram.v1
+```
+
+**Descriptor (normative)**
+
+```json
+{
+  "$schema": "object://schema/ai.brain.ngram.v1",
+  "type": "ai.brain.ngram",
+  "order": 1,
+  "domain": "token | symbol",
+  "transition_space": "closed",
+  "invariants": [
+    "order_fixed",
+    "probability_conserved",
+    "deterministic"
+  ]
+}
+```
+
+**Legality rules**
+
+- Probabilities must sum to 1.
+- No negative weights.
+- No runtime updates.
+- Traversal must be deterministic.
+
+### 16.6 `ai.brain.svg-tensor.v1`
+
+**Schema URI**
+
+```
+object://schema/ai.brain.svg-tensor.v1
+```
+
+**Descriptor (normative)**
+
+```json
+{
+  "$schema": "object://schema/ai.brain.svg-tensor.v1",
+  "type": "ai.brain.svg-tensor",
+  "geometry_space": "2d | 2.5d | 3d",
+  "weight_encoding": "path | transform | adjacency",
+  "topology": "graph | lattice | manifold",
+  "invariants": [
+    "geometry_is_weight",
+    "no_visual_semantics",
+    "deterministic_traversal"
+  ]
+}
+```
+
+### 16.7 `ai.inference.profile.v1`
+
+**Schema URI**
+
+```
+object://schema/ai.inference.profile.v1
+```
+
+**Descriptor (normative)**
+
+```json
+{
+  "$schema": "object://schema/ai.inference.profile.v1",
+  "type": "ai.inference.profile",
+  "mode": "matrix | graph | hybrid",
+  "inputs": [
+    "ai.tokenizer",
+    "ai.vocab",
+    "ai.model.weights",
+    "ai.brain.*"
+  ],
+  "output": "token-stream",
+  "invariants": [
+    "no_sampling",
+    "no_randomness",
+    "no_external_state"
+  ]
+}
+```
+
+### 16.8 `ai.agent.reply.v1`
+
+**Schema URI**
+
+```
+object://schema/ai.agent.reply.v1
+```
+
+**Descriptor (normative)**
+
+```json
+{
+  "$schema": "object://schema/ai.agent.reply.v1",
+  "type": "ai.agent.reply",
+  "format": "text | tokens | structured",
+  "postprocessing": "none | normalize | detokenize",
+  "invariants": [
+    "projection_only",
+    "deterministic"
+  ]
+}
+```
+
+### 16.9 SVG-Tensor Legality Rules (Normative)
+
+An SVG file is a valid tensor only if all rules below hold.
+
+**Allowed elements**
+
+- `svg`
+- `g`
+- `path`
+- `line`
+- `polyline`
+- `polygon`
+- `circle`
+- `ellipse`
+- `defs`
+- `use`
+- `metadata`
+
+**Forbidden elements**
+
+- `script`
+- `style`
+- `image`
+- `text`
+- `foreignObject`
+- `animate*`
+- `filter`
+- `video`
+- `audio`
+
+Violation ⇒ `illegal_tensor`.
+
+**Geometry = weight law**
+
+| SVG Property     | Tensor Meaning       |
+| ---------------- | -------------------- |
+| Path length      | Weight magnitude     |
+| Path curvature   | Probability gradient |
+| Stroke width     | Confidence           |
+| Transform matrix | Tensor projection    |
+| Group nesting    | Dimensional rank     |
+| Adjacency        | Connectivity         |
+
+No element may exist without numeric interpretation.
+
+**Determinism rules**
+
+- No randomness.
+- No animation.
+- No time-dependent attributes.
+- No CSS.
+- No viewport-dependent meaning.
+
+**Traversal legality**
+
+- Graph traversal must be acyclic unless explicitly declared.
+- Cycles must encode decay.
+- Disconnected nodes are illegal.
+- Zero-length paths are illegal.
+
+**Semantic prohibition (critical)**
+
+SVG-Tensors must not be interpreted visually by default. Rendering is optional, diagnostic only, and non-authoritative.
+
+**Hash authority**
+
+- SVG hash defines tensor identity.
+- Any byte change = new brain.
+- Pretty-printing invalidates hash.
+
+**Compression safety**
+
+- SVG-Tensor must survive minification, whitespace stripping, and attribute reordering (if canonical).
+
+**Final law statement**
+
+> **AI behavior in MX2LM is not computed. It is projected from lawful objects.**
+> Tokenizers do not tokenize. Models do not run. Brains do not think.
+> The Object Server collapses meaning.
+
+---
+
+## 17. SVG-Tensor Canonicalization + WebGPU Mapping (Normative)
+
+This section defines the canonical byte form for SVG-Tensors and the normative GPU buffer mapping. Deviations are non-compliant.
+
+### 17.1 SVG-Tensor Canonicalization (`svg-tensor.canonical.v1`)
+
+Canonicalization defines the single authoritative byte stream for hashing, verification, compression, and GPU lowering.
+
+**Canonicalization goals**
+
+- identical geometry ⇒ identical bytes
+- identical bytes ⇒ identical hash
+- environment-independent meaning
+- compression safety
+- GPU-stable lowering
+
+**Pipeline (fixed order)**
+
+```
+raw SVG
+  ↓
+parse XML
+  ↓
+strip illegal elements
+  ↓
+normalize structure
+  ↓
+normalize attributes
+  ↓
+normalize numeric values
+  ↓
+normalize transforms
+  ↓
+canonical ordering
+  ↓
+canonical serialization
+  ↓
+hash
+```
+
+**Structural normalization**
+
+- Exactly one `<svg>` root.
+- Explicit `width`, `height`, and `viewBox`.
+- Units must be unitless.
+- Remove comments, processing instructions, CDATA, whitespace-only text nodes, and unused `<defs>`.
+
+**Allowed attributes**
+
+`d`, `x`, `y`, `cx`, `cy`, `r`, `rx`, `ry`, `x1`, `y1`, `x2`, `y2`, `points`, `transform`, `stroke-width`, `fill` (numeric only), `id`.
+
+Anything else ⇒ `illegal_tensor`.
+
+**Attribute order (canonical)**
+
+```
+id
+transform
+d | points
+x y | cx cy r | x1 y1 x2 y2
+stroke-width
+fill
+```
+
+**Numeric canonicalization**
+
+- IEEE-754 decimals
+- fixed precision, no scientific notation
+- canonical precision: 6 decimal places, trimmed right
+
+**Path canonicalization**
+
+- All commands absolute.
+- No shorthand commands.
+- No implicit command repetition.
+
+**Transform canonicalization**
+
+- Flatten to `matrix(a b c d e f)`.
+- No `translate/scale/rotate` functions or chains.
+
+**Element ordering**
+
+1. Depth (outer groups first)
+2. Top-left bounding box (y, then x)
+3. Element type priority: `g → path → line → polyline → polygon → circle → ellipse`
+4. ID lexical order
+
+**Canonical serialization**
+
+- UTF-8, no indentation, no newlines
+- double quotes only
+- no self-closing tags
+- explicit closing tags
+
+**Canonical hash**
+
+```
+sha256(canonical_svg_bytes)
+```
+
+### 17.2 SVG-Tensor → WebGPU Buffer Mapping (`svg-tensor.webgpu.map.v1`)
+
+SVG is the source of truth. GPU buffers are projections.
+
+**Buffer classes**
+
+| Buffer         | Purpose              |
+| -------------- | -------------------- |
+| `nodeBuffer`   | Nodes / vertices     |
+| `edgeBuffer`   | Connectivity         |
+| `weightBuffer` | Weights / magnitudes |
+| `metaBuffer`   | Shape + offsets      |
+
+**Node buffer (`Float32Array`)**
+
+```
+struct Node {
+  float x;
+  float y;
+  float z;    // 0.0 for 2D
+  float rank; // depth in group tree
+}
+```
+
+Mapping rules: each primitive emits ≥1 node; path commands emit nodes per segment; group depth increments `rank`.
+
+**Edge buffer (`Uint32Array`)**
+
+```
+struct Edge {
+  uint from;
+  uint to;
+}
+```
+
+Mapping rules: path adjacency ⇒ edges; polyline ⇒ sequential edges; closed paths ⇒ explicit cycle edge; disconnected nodes ⇒ illegal tensor.
+
+**Weight buffer (`Float32Array`)**
+
+```
+struct Weight {
+  float magnitude;  // length / area
+  float confidence; // stroke-width
+  float gradient;   // curvature
+}
+```
+
+Mapping rules: path length → magnitude; stroke width → confidence; curvature → gradient; transform scale → multiplicative weight.
+
+**Meta buffer (`Uint32Array`)**
+
+```
+struct Meta {
+  uint nodeCount;
+  uint edgeCount;
+  uint topology; // enum
+  uint flags;    // invariants bitmask
+}
+```
+
+**Deterministic indexing**
+
+- Assign indices after canonical ordering.
+- Sequential, never reused.
+- Never reordered by GPU.
+
+**Binding constraints**
+
+Allowed: `STORAGE`, `UNIFORM`, `COPY_SRC`, `COPY_DST`.  
+Forbidden: `MAP_WRITE`, `INDIRECT`.
+
+**Shader constraints**
+
+- Pure, deterministic shaders only.
+- No time-based branching.
+- No buffer writes.
+- No randomness.
+
+**Round-trip invariant**
+
+```
+SVG
+ → canonicalize
+ → GPU buffers
+ → inverse projection
+ = same canonical SVG
+```
+
+**Final law statement**
+
+> **SVG-Tensors are geometry frozen into law. GPUs may read them. Runtimes may project them. Nothing may reinterpret them.**
+
+---
+
+## 18. SCXQ2 SVG-Tensor Binary Lanes + Merkle Hashing (Normative)
+
+This section defines byte-level lane layouts and merkle-verified integrity for SCXQ2 SVG-Tensors.
+
+### 18.1 Global Binary Rules (All Lanes)
+
+- Endianness: little-endian
+- Alignment: natural (no padding unless specified)
+- Integers: unsigned unless noted
+- Floats: IEEE-754 only
+- Counts: explicit; no sentinels
+- Order: canonical lane order enforced externally (`M → T → G → X → W`)
+
+### 18.2 Lane Header (Common)
+
+```
+struct LaneHeader {
+  uint8   lane_id;        // 'M','T','G','X','W' (ASCII)
+  uint8   version_major;  // = 1
+  uint8   version_minor;  // = 0
+  uint8   encoding;       // enum
+  uint32  precision;      // fixed-point scale or 0 if N/A
+  uint32  item_count;     // number of items in this lane
+}
+```
+
+**Encoding enum**
+
+```
+0x00 = RAW
+0x01 = DELTA
+0x02 = DICT
+0x03 = DELTA+DICT
+```
+
+### 18.3 Lane M — Metadata (`SCXQ2:M`)
+
+**Layout**
+
+```
+struct MetaItem {
+  uint32 id_hash;     // truncated hash of element id
+  uint16 rank;        // group depth
+  uint16 flags;       // invariant bitmask
+}
+```
+
+**Flags bitmask**
+
+```
+bit 0  = has_cycle
+bit 1  = is_root
+```
+
+**Stream**
+
+```
+[LaneHeader][MetaItem × item_count]
+```
+
+### 18.4 Lane T — Topology (`SCXQ2:T`)
+
+**Layout**
+
+```
+struct Edge {
+  uint32 from;
+  int32  delta_to;   // signed, to = from + delta_to
+}
+```
+
+**Stream**
+
+```
+[LaneHeader][Edge × edge_count]
+```
+
+Rules: node indices are canonical and monotonic; `delta_to` must not be zero.
+
+### 18.5 Lane G — Geometry (`SCXQ2:G`)
+
+**Command stream**
+
+```
+struct Command {
+  uint8 opcode;      // M=1, L=2, C=3, Q=4, Z=5
+  uint8 arity;       // number of coordinate pairs
+}
+```
+
+**Coordinate stream**
+
+```
+struct Coord {
+  int32 dx;   // delta-encoded
+  int32 dy;
+  int32 dz;   // 0 if 2D
+}
+```
+
+**Stream**
+
+```
+[LaneHeader]
+[Command × command_count]
+[Coord × coord_count]
+```
+
+Rules: first coord in a path is absolute (delta from 0); all others relative; `precision` defines scale.
+
+### 18.6 Lane X — Transforms (`SCXQ2:X`)
+
+**Layout**
+
+```
+struct Matrix {
+  int32 a;
+  int32 b;
+  int32 c;
+  int32 d;
+  int32 e;
+  int32 f;
+}
+```
+
+All values fixed-point using header precision.
+
+**Stream**
+
+```
+[LaneHeader][Matrix × matrix_count]
+```
+
+Rules: identity matrices may be omitted if declared; order must match canonical element order.
+
+### 18.7 Lane W — Weights (`SCXQ2:W`)
+
+**Layout**
+
+```
+struct Weight {
+  int32 magnitude;
+  int32 confidence;
+  int32 gradient;
+}
+```
+
+All values fixed-point (same precision as geometry unless declared otherwise).
+
+**Stream**
+
+```
+[LaneHeader][Weight × weight_count]
+```
+
+### 18.8 Lane Assembly Envelope
+
+```
+struct SCXQ2_Envelope {
+  char     magic[6];     // "SCXQ2S"
+  uint16   version;      // 0x0100
+  uint8    lane_count;   // usually 5
+  uint8    reserved;
+  uint32   toc_offset;   // offset to table of contents
+  uint32   total_size;   // bytes
+}
+```
+
+**TOC entry**
+
+```
+struct TOCEntry {
+  uint8   lane_id;
+  uint32  offset;
+  uint32  size;
+}
+```
+
+### 18.9 Merkle-Verified Lane Hashing (`scxq2.svg-tensor.merkle.v1`)
+
+**Hash authority**
+
+- Root hash binds SVG-Tensor identity.
+- Lane hashes bind each lane.
+- Chunk hashes bind internal structure.
+
+Canonical SVG hash anchors all merkle roots.
+
+**Hash functions**
+
+- Primary: SHA-256
+- Optional: BLAKE3 (declared)
+- Domain separation required (e.g., `scxq2:lane:G`, `scxq2:chunk:W`)
+
+**Chunking rule**
+
+- Fixed chunk size: 4096 bytes
+- Last chunk may be smaller
+
+**Chunk hash**
+
+```
+H_chunk = SHA256("scxq2:chunk:<lane_id>" || chunk_bytes)
+```
+
+**Lane root**
+
+```
+H_lane = SHA256("scxq2:lane:<lane_id>" || H_chunk_0 || ... || H_chunk_n)
+```
+
+**Global root**
+
+```
+H_root = SHA256(
+  "scxq2:svg-tensor" ||
+  H_M || H_T || H_G || H_X || H_W ||
+  canonical_svg_hash
+)
+```
+
+### 18.10 Proof Objects (Partial Verification)
+
+```
+{
+  "lane": "G",
+  "chunk_index": 12,
+  "chunk_hash": "...",
+  "siblings": ["...", "..."],
+  "lane_root": "...",
+  "global_root": "..."
+}
+```
+
+### 18.11 Verification Algorithm (Normative)
+
+```
+verify(proof):
+  1. Recompute H_chunk
+  2. Rebuild lane root via siblings
+  3. Rebuild global root
+  4. Compare to declared H_root
+```
+
+Any mismatch ⇒ `integrity_violation`.
+
+### 18.12 Update + Mutation Rules
+
+- Any lane change invalidates that lane hash and the global root.
+- Other lanes may remain cached.
+- Canonical SVG hash must not change unless semantics change.
+
+### 18.13 GPU Safety Invariant
+
+GPU runtimes may verify only required lanes but must refuse execution if required lanes lack proof. Verified buffers are read-only.
+
+**Final law statement**
+
+> **SCXQ2 lanes are independently provable truths bound together by a single, immutable root.**
+
+---
+
+## 19. MX2LM Object Server — SCXQ2 Integration Hooks (Normative)
+
+These hooks define integration points for SCXQ2 SVG-Tensors. They add no execution authority and remain projection-only.
+
+### 19.1 Prime Law (Reaffirmed)
+
+> **The Object Server may verify, project, and refuse. It may not compute, infer, or decide.**
+
+### 19.2 Integration Phases (Fixed)
+
+SCXQ2 integration is allowed only at:
+
+```
+resolve → load → verify → project
+```
+
+No hooks exist outside these phases.
+
+### 19.3 Hook Interface (Abstract)
+
+```ts
+type ObjectHook = {
+  phase: "load" | "verify" | "project";
+  accepts: string[];          // object types
+  provides: string[];         // capabilities
+  fn(input): HookResult;
+};
+```
+
+Hooks must be pure, deterministic, and must not mutate objects or access network/FS beyond declared payloads.
+
+### 19.4 Load-Phase Hooks
+
+**`hook.scxq2.detect`**
+
+- Phase: `load`
+- Accepts: `ai.brain.svg-tensor.v1`
+- Provides: `compression-aware-load`
+
+Detect whether payload is raw canonical SVG or SCXQ2-compressed SVG-Tensor.
+
+```
+input: { payload_bytes: Uint8Array }
+output: { format: "svg-canonical" | "scxq2-svg", envelope?: SCXQ2EnvelopeMeta }
+```
+
+Rules: must not decompress, validate, or hash.
+
+**`hook.scxq2.extract-toc`**
+
+- Phase: `load`
+- Accepts: `scxq2-svg`
+- Provides: `lane-index`
+
+Extract lane table-of-contents for later verification/projection.
+
+### 19.5 Verify-Phase Hooks
+
+**`hook.scxq2.merkle.verify-root`**
+
+- Phase: `verify`
+- Accepts: `scxq2-svg`
+- Provides: `integrity-verification`
+
+Verify global Merkle root against descriptor.
+
+Failure ⇒ `verification_error.integrity_violation`.
+
+**`hook.scxq2.merkle.verify-lanes`**
+
+- Phase: `verify`
+- Accepts: `scxq2-svg`
+- Provides: `lane-verification`
+
+Verify required lanes based on projection. Unused lanes may remain unverified.
+
+**`hook.scxq2.legality.svg-tensor`**
+
+- Phase: `verify`
+- Accepts: `ai.brain.svg-tensor.v1`
+- Provides: `tensor-legality`
+
+Ensure canonical SVG legality after decompression if applicable. Failure ⇒ `verification_error.illegal_tensor`.
+
+### 19.6 Project-Phase Hooks
+
+**`hook.scxq2.decompress-lanes`**
+
+- Phase: `project`
+- Accepts: `scxq2-svg`
+- Provides: `lane-streams`
+
+Decompress only required lanes. Must be lazy, lane-scoped, and not reorder.
+
+**`hook.svg.canonical.inflate`**
+
+- Phase: `project`
+- Accepts: `lane-streams`
+- Provides: `canonical-svg`
+
+Reassemble canonical SVG bytes from decompressed lanes.
+
+Invariant:
+
+```
+inflate(decompress(scxq2(svg))) === canonical_svg_bytes
+```
+
+Failure ⇒ `projection_error.round_trip_failure`.
+
+**`hook.svg.webgpu.map`**
+
+- Phase: `project`
+- Accepts: `ai.brain.svg-tensor.v1`
+- Provides: `gpu-buffers`
+
+Map SVG-Tensor to WebGPU buffers without mutation. Buffers must be read-only and indices canonical.
+
+### 19.7 Projection Binding Rules
+
+Projections may declare required hooks:
+
+```json
+{
+  "projections": {
+    "webgpu": {
+      "requires": [
+        "scxq2.merkle.verify-lanes",
+        "scxq2.decompress-lanes",
+        "svg.webgpu.map"
+      ]
+    }
+  }
+}
+```
+
+If a required hook is unavailable, the projection is not selectable.
+
+### 19.8 Caching Rules (Critical)
+
+| Item              | Cache Key                         |
+| ----------------- | --------------------------------- |
+| Lane TOC          | `(object_id, hash)`               |
+| Lane hash         | `(object_id, lane_id)`            |
+| Decompressed lane | `(object_id, lane_id, lane_hash)` |
+| GPU buffer        | `(object_id, lane_set_hash)`      |
+
+Invalidate caches if canonical SVG hash, Merkle root, or lane hash changes.
+
+### 19.9 Forbidden Integrations (Hard Fail)
+
+The Object Server must not:
+
+- auto-decompress on load
+- verify unused lanes
+- infer missing lanes
+- optimize geometry
+- modify buffers
+- execute shaders
+- sample randomness
+- reorder indices
+
+Violations ⇒ non-compliant server.
+
+### 19.10 Error Surface (Standardized)
+
+| Hook Failure       | Error                                    |
+| ------------------ | ---------------------------------------- |
+| Merkle mismatch    | `verification_error.integrity_violation` |
+| Illegal SVG        | `verification_error.illegal_tensor`      |
+| Lane missing       | `load_error.missing_lane`                |
+| Round-trip failure | `projection_error.round_trip_failure`    |
+
+Errors must emit `object.error`.
+
+### 19.11 Minimal Reference Wiring (Pseudo-Code)
+
+```js
+if (object.type === "ai.brain.svg-tensor") {
+  detectSCXQ2();
+  extractTOC();
+  verifyMerkleRoot();
+  verifyRequiredLanes(projection);
+  decompressRequiredLanes();
+  if (projection === "webgpu") {
+    mapToWebGPU();
+  }
+}
+```
+
+**Final law statement**
+
+> **SCXQ2 does not live inside MX2LM. MX2LM merely verifies and projects it.**
 
 ---
 
