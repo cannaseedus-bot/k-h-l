@@ -1,0 +1,84 @@
+{
+  "$schema": "xjson://schema/core/v1",
+  "id": "object://schema/mx2lm.server.v1",
+  "type": "schema",
+
+  "title": "MX2LM Cluster Server Schema",
+  "version": "1.1.0",
+
+  "required": [
+    "server",
+    "cluster",
+    "pi",
+    "transports"
+  ],
+
+  "properties": {
+
+    "server": {
+      "type": "object",
+      "required": ["id", "role", "invariants"],
+      "properties": {
+        "id": { "type": "string" },
+        "role": { "const": "object-projection-runtime" },
+        "invariants": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "cluster": {
+      "type": "object",
+      "required": [
+        "id",
+        "node_id",
+        "role",
+        "membership",
+        "epoch"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "node_id": { "type": "string" },
+        "role": { "enum": ["peer", "edge", "anchor"] },
+        "membership": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "leader": {
+          "type": ["string", "null"]
+        },
+        "epoch": { "type": "integer" }
+      }
+    },
+
+    "pi": {
+      "type": "object",
+      "required": ["entropy", "decay_rate"],
+      "properties": {
+        "entropy": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "decay_rate": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_restarts": { "type": "integer" }
+      }
+    },
+
+    "transports": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "http",
+          "websocket",
+          "object-db",
+          "gossip"
+        ]
+      }
+    }
+  }
+}
