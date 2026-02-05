@@ -1,0 +1,173 @@
+@server {
+  @id: "mx2lm.server.cluster"
+  @version: "1.1.0"
+  @role: "cluster-object-projection-runtime"
+
+  @invariants: [
+    "no_execution_authority",
+    "projection_only",
+    "deterministic",
+    "cluster_consensus_required"
+  ]
+}
+
+@state {
+
+  @server.status: "stopped" | "joining" | "running" | "leaving" | "error"
+
+  @cluster.id: "mx2lm.cluster.v1"
+  @cluster.node_id: "node://<uuid>"
+  @cluster.role: "peer" | "edge" | "anchor"
+
+  @cluster.members: [ node://* ]
+  @cluster.leader: node://* | null
+
+  @cluster.epoch: uint64
+  @cluster.last_sync: timestamp
+
+}
+
+@control {
+
+  start  -> discover -> join -> sync -> serve -> heartbeat
+  leave  -> drain -> announce -> halt
+
+  crash  -> classify -> decide -> restart | halt
+
+}
+
+@flow join {
+
+  @Pop.load {
+    source: "object://mx2lm/cluster.manifest"
+  }
+
+  @Wo.verify {
+    invariants: [
+      "cluster.identity.valid",
+      "node.signature.valid"
+    ]
+  }
+
+  @Sek.discover {
+    method: "dns | static | gossip"
+  }
+
+  @Sek.join {
+    announce: true
+  }
+
+  @Sek.sync {
+    scope: "object-index"
+  }
+
+}
+
+@flow sync {
+
+  @Sek.fetch {
+    target: "cluster.object.index"
+  }
+
+  @Wo.verify {
+    invariants: [
+      "merkle.root.match",
+      "epoch.monotonic"
+    ]
+  }
+
+  @Sek.commit {
+    scope: "local-index"
+  }
+
+}
+
+@flow serve {
+
+  @Sek.bind {
+    transports: [
+      "http",
+      "websocket",
+      "object-db"
+    ]
+  }
+
+  @Sek.serve {
+    mode: "projection-only"
+    visibility: "cluster-global"
+  }
+
+}
+
+@flow heartbeat {
+
+  @Sek.emit {
+    event: "cluster.heartbeat"
+  }
+
+  @Sek.gossip {
+    fields: [
+      "@cluster.epoch",
+      "@cluster.members",
+      "@server.status"
+    ]
+  }
+
+  @pi.entropy -= @pi.decay_rate
+
+}
+
+@flow crash {
+
+  @Wo.classify {
+    error -> [
+      "network_partition",
+      "object_index_divergence",
+      "verification_failure",
+      "unknown"
+    ]
+  }
+
+  @Sek.decide {
+    rule: "π-cluster-restart-policy"
+  }
+
+}
+
+@rule π-cluster-restart-policy {
+
+  if (
+    @pi.entropy < 0.4 &&
+    @cluster.leader != @cluster.node_id
+  ) {
+    action: restart
+  }
+
+  else {
+    action: halt
+  }
+
+}
+
+@flow leave {
+
+  @Sek.drain {
+    timeout_ms: 15000
+  }
+
+  @Sek.announce {
+    event: "cluster.leave"
+  }
+
+  @Sek.halt {}
+
+}
+
+@law {
+  objects: "cluster-global"
+  storage: "local"
+  authority: "shared"
+  restart: "pi-governed"
+  consensus: "required"
+  interpretation: "forbidden"
+}
