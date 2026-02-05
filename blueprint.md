@@ -199,6 +199,328 @@ No rendering, no heuristics — just geometry + math.
 
 For each candidate `c`:
 
+---
+
+## 10. Hybrid Wormhole Control Plane (Tiered Stack)
+
+**Purpose:** a tiered control plane for capability discovery, state sync, live runtime, and cryptographic proof that remains orthogonal to π/geometry semantics.
+
+### 10.1 Four-Layer Stack (canonical)
+
+| Layer | Role | Protocol class | Authority |
+| --- | --- | --- | --- |
+| 1. Discovery | capability negotiation + service discovery | DNS-SD + DNSSEC + DANE | non-authoritative |
+| 2. Sync | resumable state sync + bulk transfer | HTTP/WebDAV + TLS + OAuth2 | authoritative |
+| 3. Runtime | live state + RPC | WebSocket (binary) + per-message auth | ephemeral |
+| 4. Proof | compression + integrity + verification | SCXQ2 + zk proof envelope | authoritative (async) |
+
+### 10.2 Locked Invariants (Wormhole Laws)
+
+**Law 1 — Layer Orthogonality (LOCKED)**
+```
+∀ layer_i, layer_j where i ≠ j:
+layer_i correctness ⟂ layer_j availability
+```
+No layer may assume availability, correctness, or continuity of any other layer.
+
+**Law 2 — Capability Before Authority (LOCKED)**
+```
+authority := f(discovery.capabilities ∩ client.capabilities)
+```
+Authority is always discovered and negotiated; it is never assumed.
+
+**Law 3 — Runtime Is Ephemeral (LOCKED)**
+```
+runtime_state ⊆ transient
+authoritative_state ∈ sync_layer OR proof_layer
+```
+Runtime never becomes authoritative.
+
+**Law 4 — Proof Is Asynchronous and Non-Blocking (LOCKED)**
+```
+verification ∈ background
+failure ⇒ invalidate, not halt
+```
+Proof governs acceptance, not delivery.
+
+### 10.3 Binding to π-LM / Object Server / Adapter v1
+
+**Semantic boundary:** `object://` is the seam between transport and meaning.
+
+```
+DNS / HTTP / WS / SCXQ2
+        ↓
+    object://
+        ↓
+     π-GCCP
+```
+
+**Mapping:**
+
+| Concern | Hybrid wormhole layer | π/Object Server exposure |
+| --- | --- | --- |
+| Capability discovery | DNS discovery | hidden (non-semantic) |
+| State sync | HTTP sync | object:// store |
+| Live deltas | WebSocket runtime | geometry deltas |
+| Integrity proofs | SCXQ2 proof | verification envelope |
+
+π consumes **geometry only**; transport, auth, compression, and proof are below `object://`.
+
+### 10.4 Adapter v1 Placement (clean fit)
+
+Adapters emit geometry and never encode transport assumptions.
+
+```json
+{
+  "@type": "pi.signal.v1",
+  "geometry": { "...": "..." }
+}
+```
+
+| Backend | Placement |
+| --- | --- |
+| GGUF / ONNX | local → runtime WS or HTTP sync |
+| WASM / WebGPU | browser → runtime WS |
+| Batch jobs | HTTP sync |
+| Archives | HTTP + SCXQ2 |
+
+### 10.5 Wormhole Capability Schema v1 (normative)
+
+**Canonical capability object (authoritative, transport-independent)**
+
+```json
+{
+  "schema": "wormhole.capability.v1",
+  "service": {
+    "name": "string",
+    "domain": "fqdn",
+    "instance": "uuid"
+  },
+  "endpoints": {
+    "http": "https://host/path",
+    "ws": "wss://host/path",
+    "proof": "https://host/proof"
+  },
+  "protocols": {
+    "discovery": ["dns", "https"],
+    "sync": ["http", "http+delta"],
+    "runtime": ["ws", "ws+binary"],
+    "proof": ["scxq2"]
+  },
+  "compression": ["scxq2", "brotli", "lz4"],
+  "auth": ["jwt", "oauth2", "mtls", "anonymous"],
+  "capabilities": [
+    "object-server",
+    "pi-adapter-v1",
+    "pi-gccp-v1",
+    "svg-tensor-index",
+    "crdt"
+  ],
+  "limits": {
+    "max_frame_bytes": 16777216,
+    "max_state_bytes": 1073741824,
+    "rate_per_sec": 1000
+  },
+  "hash": "sha256:..."
+}
+```
+
+**DNS TXT record layout (summary only, authoritative)**
+
+Record name:
+
+```
+_asxr._tcp.<domain>
+```
+
+TXT payload (key=value, semicolon-delimited):
+
+```
+v=1;
+http=https://api.example.com/sync;
+ws=wss://api.example.com/runtime;
+proof=https://api.example.com/proof;
+proto=ws,http,scxq2;
+compress=scxq2,brotli;
+auth=jwt;
+caps=object-server,pi-adapter-v1,pi-gccp-v1;
+hash=sha256:abcd...
+```
+
+Rules:
+
+- TXT record MUST fit DNS limits (summary only).
+- `hash` MUST correspond to the HTTPS descriptor.
+- DNSSEC REQUIRED for trust.
+
+**HTTPS capability descriptor**
+
+URL:
+
+```
+https://<domain>/.well-known/wormhole-capabilities.json
+```
+
+Rules:
+
+- JSON MUST match the canonical schema.
+- `hash` MUST equal SHA-256 of canonicalized JSON.
+- HTTPS cert MUST match DNS name (DANE allowed).
+
+**Capability negotiation rule (LOCKED)**
+
+```
+SelectedCapabilities =
+  ClientCapabilities ∩ ServerCapabilities
+```
+
+No defaults. No assumptions. No silent downgrade.
+
+### 10.6 SCXQ2 Proof Envelope v1 (normative)
+
+**Canonical proof envelope**
+
+```json
+{
+  "schema": "scxq2.proof.v1",
+  "subject": {
+    "object": "object://state/path",
+    "version": "monotonic-id",
+    "byte_length": 12345678
+  },
+  "compression": {
+    "algorithm": "scxq2",
+    "dictionary_id": "sha256:...",
+    "ratio": 87.4
+  },
+  "integrity": {
+    "root_hash": "sha256:...",
+    "chunk_hashes": ["sha256:...", "sha256:..."]
+  },
+  "proof": {
+    "type": "zk-stark",
+    "curve": "bls12-381",
+    "proof_bytes": "base64..."
+  },
+  "signatures": {
+    "server": "base64...",
+    "algorithm": "sphincs+"
+  },
+  "timestamp": "iso-8601"
+}
+```
+
+**Verification contract (π / Object Server)**
+
+1. Verify signature.
+2. Verify proof against `root_hash`.
+3. Decompress payload.
+4. Hash decompressed payload.
+5. Compare hash == `root_hash`.
+
+If any step fails:
+
+- mark state invalid
+- do not halt runtime
+- trigger resync
+
+**Proof non-blocking rule (LOCKED)**
+
+```
+delivery ≠ acceptance
+```
+
+### 10.7 Hybrid Wormhole Conformance Tests v1
+
+**Discovery conformance — DNS → HTTPS parity**
+
+- TXT hash MUST match HTTPS descriptor hash.
+- Missing HTTPS descriptor = FAIL.
+- Hash mismatch = FAIL.
+
+**Negotiation conformance — capability intersection**
+
+- Server advertises `{A,B,C}`.
+- Client advertises `{B,C,D}`.
+- Selected MUST be `{B,C}` only.
+- Implicit fallback = FAIL.
+
+**Runtime conformance — ephemerality**
+
+- Kill WebSocket.
+- Client MUST recover via HTTP sync.
+- No data loss allowed.
+
+**Proof conformance — corruption detection**
+
+- Flip one bit in compressed payload.
+- Proof verification MUST fail.
+- Runtime MUST continue.
+- State MUST be invalidated.
+
+**π integration conformance — geometry determinism**
+
+- Same SVG-Tensor + same π-Profile.
+- MUST collapse to identical score.
+- CPU and GPU paths MUST match within ε.
+
+**SCXQ2 independence**
+
+- Disable SCXQ2.
+- System MUST still function (larger payloads).
+- Proof layer is optional, never required.
+
+### 10.8 Minimal Reference Client (compliance anchor)
+
+**Responsibilities**
+
+1. Perform DNS discovery.
+2. Fetch HTTPS capability descriptor.
+3. Negotiate protocol.
+4. Sync initial state via HTTP.
+5. Establish WebSocket runtime.
+6. Receive geometry deltas.
+7. Collapse via π-GCCP.
+8. Verify SCXQ2 proof asynchronously.
+
+**Minimal control flow**
+
+```
+discover()
+  ↓
+negotiate()
+  ↓
+http_sync(full)
+  ↓
+ws_connect()
+  ↓
+on_delta → π_collapse()
+  ↓
+on_proof → verify_or_invalidate()
+```
+
+**Minimal client pseudocode**
+
+```ts
+const caps = await discoverDNS(domain);
+const desc = await fetch(descUrl);
+
+const negotiated = intersect(clientCaps, desc.capabilities);
+
+await httpSync(desc.endpoints.http);
+
+const ws = connect(desc.endpoints.ws);
+
+ws.on("delta", d => {
+  const geometry = decode(d);
+  piCollapse(geometry);
+});
+
+ws.on("proof", p => {
+  verifySCXQ2(p);
+});
+```
+
 ```
 score(c) =
   α · cosine(embedding_q, embedding_c)
