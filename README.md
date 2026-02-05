@@ -10,6 +10,12 @@ It is a **law-bound execution substrate**.
 
 ---
 
+# Blueprint
+
+For a condensed implementation blueprint distilled from `todo.md`, see [`blueprint.md`](blueprint.md). It summarizes the SCXQ2 core, KUHUL mapping, SBS-1 assembly flow, and integration invariants in one place.
+
+---
+
 # kuhul://schema/core.v1
 
 **Status:** FROZEN
