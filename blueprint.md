@@ -5234,7 +5234,7 @@ This preserves determinism and avoids forbidden GPU operations.
 ## 26. LIVE-ORCH-1 — Live Agent Orchestration (Normative)
 
 **Spec ID:** `mx2lm.live.orch.v1`  
-**Status:** Normative / Law-Grade
+**Status:** Normative / Frozen
 
 **Live Agent Orchestration on top of MX2LM Inference**, with **zero execution leakage** and **no model-server behavior**.
 
