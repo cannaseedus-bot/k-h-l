@@ -141,115 +141,173 @@ MX2LM CLI / Host
 
 ---
 
-## 9. GGUF Embeddings via Object Server (Lawful Wiring)
+## 9. π-LM v1 — Semantic Retrieval Stack
 
-**Invariant:** π-LM never consumes vectors. It consumes **retrieved context objects** prepared by the Object Server.
+**Invariant:** the index is **geometrically addressed**, **π-biased**, and **binary-cached**, unifying N-gram and embedding retrieval under a single object contract.
 
-### 9.1 Canonical Object Types
+### 9.1 Index Migration: Text → SVG-Tensor Geometry
 
-**Embedding Vector Object** (`object://embedding/vector.v1`)
+```
+documents
+  → tokenize (N-gram + embed)
+  → binary pack
+  → SVG-Tensor geometry
+  → SCXQ2 lanes
+```
+
+### 9.2 SVG-Tensor Index (canonical)
+
+Each indexed unit is a **non-visual SVG-Tensor** (geometry = data).
+
+```xml
+<svg tensor="semantic.index.v1"
+     xmlns="http://www.w3.org/2000/svg"
+     data-hash="sha256:…"
+     data-doc-id="doc_42">
+
+  <g id="ngrams" space="lexical">
+    <path id="ng_abc"
+          d="M0,0 L3,0"
+          weight="3"
+          freq="12"/>
+    <path id="ng_bcd"
+          d="M0,1 L3,1"
+          weight="3"
+          freq="7"/>
+  </g>
+
+  <g id="embedding" space="semantic">
+    <path d="M0,0 L0.12,0.33 L0.91,0.18 …"
+          norm="1.0"/>
+  </g>
+
+</svg>
+```
+
+**Interpretation (locked):**
+
+| Geometry    | Meaning              |
+| ----------- | -------------------- |
+| Path length | Magnitude            |
+| Direction   | Semantic orientation |
+| Density     | Confidence           |
+| Group       | Retrieval space      |
+
+No rendering, no heuristics — just geometry + math.
+
+### 9.3 π-Biased Retrieval (core)
+
+For each candidate `c`:
+
+```
+score(c) =
+  α · cosine(embedding_q, embedding_c)
++ β · ngram_overlap(q, c)
++ π · phase_align(q, c)
+```
+
+Where:
+
+```
+phase_align = cos(Δθ)
+Δθ = angular difference between SVG-Tensor paths
+π = 3.141592653589793
+```
+
+### 9.4 Unified N-gram + Embedding Retrieval
+
+| Component  | Role                          |
+| ---------- | ----------------------------- |
+| N-grams    | Lexical anchoring (exactness) |
+| Embeddings | Semantic proximity            |
+| π-phase    | Structural coherence          |
+
+All three live in the same SVG-Tensor index.
+
+### 9.5 Object Server API (contract)
+
+**Namespace:** `object://retrieve/semantic.v1`
+
+**Request object**
 
 ```json
 {
-  "@object": "embedding.vector",
-  "@version": "v1",
-  "@source": {
-    "type": "gguf",
-    "model": "Qwen3-VL-Embedding-2B",
-    "path": "C:/public_html/MX2LM SERVER/QwenVLGGUF/Qwen.Qwen3-VL-Embedding-2B.Q2_K.gguf"
+  "@object": "retrieve.semantic.v1",
+  "query": {
+    "text": "binary svg tensor retrieval",
+    "mode": "hybrid"
   },
-  "@input": {
-    "type": "text",
-    "content": "hello world"
+  "bias": {
+    "pi": true,
+    "alpha": 0.55,
+    "beta": 0.35,
+    "phase": 0.10
   },
-  "@vector": {
-    "dim": 1024,
-    "values": []
-  },
-  "@hash": "sha256:..."
-}
-```
-
-**Embedding Index Object** (`object://embedding/index.v1`)
-
-```json
-{
-  "@object": "embedding.index",
-  "@version": "v1",
-  "@metric": "cosine",
-  "@dim": 1024,
-  "@entries": [
-    {
-      "@ref": "sha256:...",
-      "@text": "π-LM uses deterministic collapse..."
-    }
-  ]
-}
-```
-
-**Retrieved Context Object** (`object://context/retrieved.v1`)
-
-```json
-{
-  "@object": "context.retrieved",
-  "@version": "v1",
-  "@query": "Explain π inference",
-  "@results": [
-    {
-      "score": 0.92,
-      "text": "π-LM generates text via low-rank geometry..."
-    }
-  ]
-}
-```
-
-### 9.2 Provider Integration (GGUF Embedder)
-
-The GGUF embedder outputs a **pure JSON embedding object** so the Object Server can ingest it directly.
-
-```python
-print(json.dumps({
-    "@object": "embedding.vector",
-    "@version": "v1",
-    "@source": {
-        "type": "gguf",
-        "model": model_name
-    },
-    "@input": {
-        "type": "text",
-        "content": text
-    },
-    "@vector": {
-        "dim": len(embedding),
-        "values": embedding
-    }
-}))
-```
-
-### 9.3 Object Server Flow (Minimal)
-
-1. **Embed input** to create `embedding.vector`.
-2. **Store vectors** in `embedding.index`.
-3. **Retrieve top-K** with cosine (or future geometry).
-4. **Emit `context.retrieved`** and pass only text to π-LM.
-
-### 9.4 π-LM Integration (Only Allowed Path)
-
-π-LM consumes retrieved text context, never vectors:
-
-```json
-{
-  "@pi.state": {
-    "prompt": "Explain π inference",
-    "retrieved_context": [
-      "π-LM generates text via low-rank geometry...",
-      "π schedules modulate attention, phase, and time..."
-    ]
+  "limit": 8,
+  "cache": {
+    "allow": true,
+    "ttl": 3600
   }
 }
 ```
 
-**One-line summary:** GGUF embeddings are routed through the Object Server as external semantic objects; π-LM remains independent and consumes only retrieved context.
+**Response object**
+
+```json
+{
+  "results": [
+    {
+      "doc_id": "doc_42",
+      "score": 0.912,
+      "components": {
+        "embedding": 0.71,
+        "ngram": 0.18,
+        "pi_phase": 0.022
+      },
+      "hash": "sha256:…"
+    }
+  ],
+  "cache_hit": false,
+  "index_hash": "sha256:…"
+}
+```
+
+### 9.6 Caching + Hashing Rules
+
+**Cache key**
+
+```
+sha256(
+  query_text +
+  bias_profile +
+  index_hash
+)
+```
+
+**Cache validity**
+
+- query hash matches
+- π-profile hash matches
+- SVG-Tensor index hash matches
+
+### 9.7 Training-less Update Mechanism
+
+1. Append-only SVG-Tensor insertion.
+2. Recompute index hash.
+3. Invalidate affected cache keys.
+
+### 9.8 π-Profiles (preview)
+
+```json
+{
+  "@pi_profile": "analytical.v1",
+  "alpha": 0.4,
+  "beta": 0.4,
+  "phase": 0.2
+}
+```
+
+**One-line summary:** retrieval is a single geometric object operation governed by π-biased math, exposed via a lawful Object Server API, cached and verified by hashes.
 
 ---
 
