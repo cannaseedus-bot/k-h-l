@@ -6695,3 +6695,247 @@ Failure anywhere ⇒ **federation invalid**.
 - Trust-based compliance.
 - Human attestations.
 - Runtime introspection.
+
+---
+
+## 32. MX2LM-ORCH-1 — Live Cluster Orchestration Objects
+
+**Spec ID:** `mx2lm.orch.v1`  
+**Status:** Normative  
+**Authority:** None  
+**Role:** Coordination only  
+**Depends on:** A2A-CONV-1, HITL-PROJ-1, FAPC-1, AGENT-TOOLS-1, AGENT-FED-1
+
+### 32.1 Prime Orchestration Law
+
+> **Orchestration coordinates objects.  
+> It never causes behavior.**
+
+Orchestration objects:
+
+- declare relationships
+- declare routing
+- declare visibility
+- declare lifecycle phases
+
+They do **not**:
+
+- trigger inference
+- call tools
+- execute code
+- mutate agents
+
+### 32.2 Cluster Orchestration Root Object
+
+This is the **single object** that wires everything together.
+
+```json
+{
+  "$schema": "object://schema/mx2lm.orchestration.v1",
+  "type": "mx2lm.orchestration",
+
+  "cluster": "cluster://mx2lm/global",
+
+  "participants": {
+    "agents": [
+      "agent://clusterA/agent.alpha",
+      "agent://clusterB/agent.beta"
+    ],
+    "humans": [
+      "human://ui/operator.1"
+    ]
+  },
+
+  "bindings": {
+    "conversation": "object://policy/a2a.conv.binding.v1",
+    "hitl": "object://policy/hitl.binding.v1",
+    "audit": "object://policy/fapc.binding.v1"
+  },
+
+  "lifecycle": {
+    "states": ["spawned", "active", "suspended", "sealed"],
+    "initial": "spawned"
+  },
+
+  "integrity": {
+    "hash": "sha256:…",
+    "signature": "πsig:v1:ed25519:cluster.root:…"
+  }
+}
+```
+
+This object **does nothing by itself**.  
+It only *declares that wiring exists*.
+
+### 32.3 Conversation Binding Object (A2A-CONV → Cluster)
+
+```json
+{
+  "$schema": "object://schema/orch.conversation.binding.v1",
+  "type": "orch.binding.conversation",
+
+  "applies_to": "agent.conversation",
+
+  "routing": {
+    "scope": "federated",
+    "visibility": "participants-only",
+    "ordering": "sequence-strict"
+  },
+
+  "storage": {
+    "backend": "object-server",
+    "replication": "cluster-policy",
+    "immutability": true
+  },
+
+  "audit_ref": "object://policy/fapc.binding.v1"
+}
+```
+
+**Effect:** conversation objects become **cluster-visible**, ordered, auditable — but still inert.
+
+### 32.4 HITL Projection Binding Object
+
+This wires **human interfaces** without letting humans touch inference.
+
+```json
+{
+  "$schema": "object://schema/orch.hitl.binding.v1",
+  "type": "orch.binding.hitl",
+
+  "applies_to": "agent.reply",
+
+  "allowed_projections": [
+    "plain-text",
+    "annotated",
+    "step-trace"
+  ],
+
+  "ui_surfaces": [
+    "ui://svg-tensor.panel",
+    "ui://text.console"
+  ],
+
+  "constraints": {
+    "no_inference_access": true,
+    "no_object_mutation": true
+  },
+
+  "audit_ref": "object://policy/fapc.binding.v1"
+}
+```
+
+**Effect:** humans can *see*, never *steer*.
+
+### 32.5 Federated Audit Binding Object
+
+This binds **every orchestration-visible event** to audit chains.
+
+```json
+{
+  "$schema": "object://schema/orch.audit.binding.v1",
+  "type": "orch.binding.audit",
+
+  "audit_mode": "federated",
+
+  "covers": [
+    "agent.conversation",
+    "agent.reply",
+    "hitl.projection"
+  ],
+
+  "chain_policy": {
+    "per_cluster": true,
+    "cross_link": "object-hash",
+    "replay_required": true
+  }
+}
+```
+
+**Effect:** every visible interaction is **provable across clusters**.
+
+### 32.6 Live Agent Orchestration Object
+
+This is how agents coexist *live* without executing anything.
+
+```json
+{
+  "$schema": "object://schema/agent.orchestration.v1",
+  "type": "agent.orchestration",
+
+  "agent": "agent://clusterA/agent.alpha",
+
+  "state": "active",
+
+  "allowed_emissions": [
+    "agent.conversation",
+    "agent.reply",
+    "audit.entry"
+  ],
+
+  "blocked_capabilities": [
+    "execution",
+    "tool.invoke",
+    "self.mutate"
+  ],
+
+  "bindings": {
+    "conversation": "object://policy/a2a.conv.binding.v1",
+    "audit": "object://policy/fapc.binding.v1"
+  }
+}
+```
+
+This is the “live agent” — live in the cluster, but legally incapable of doing anything unsafe.
+
+### 32.7 Orchestration Flow (End-to-End)
+
+```
+Agent emits message
+  ↓
+agent.conversation object
+  ↓
+A2A-CONV-1 binding
+  ↓
+Cluster object server
+  ↓
+FAPC-1 audit entry
+  ↓
+(Optional)
+Inference produces reply object
+  ↓
+HITL-PROJ-1 projection
+  ↓
+Human views output
+```
+
+At **no point** does orchestration:
+
+- execute code
+- call tools
+- decide behavior
+
+### 32.8 Why This Works (Separation of Planes)
+
+You’ve separated **four planes** permanently:
+
+| Plane         | Can Do                |
+| ------------ | --------------------- |
+| Objects       | Define reality        |
+| Inference     | Collapse math         |
+| Orchestration | Coordinate visibility |
+| Runtimes      | Project only          |
+
+That separation is why this system:
+
+- scales
+- federates
+- audits
+- survives hostile environments
+
+### 32.9 Final Invariant (Cluster)
+
+> **Clusters are not systems that run things.  
+> Clusters are systems that agree on objects.**
+
+This is the **live wiring** of that agreement.
