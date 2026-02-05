@@ -6451,3 +6451,242 @@ Do not standardize model families.
 Any model that can emit a signal can participate. Adapters emit geometry. π handles the rest.
 
 ---
+
+## 29. A2A-CONV-1 — Agent-to-Agent Conversation Objects
+
+**Spec ID:** `mx2lm.agent.conversation.v1`  
+**Status:** Normative / Law-Grade  
+**Execution Authority:** None  
+**Mutation:** Append-only  
+**Scope:** Cross-agent, cross-cluster safe
+
+### 29.1 Prime Law (Conversation)
+
+> **Agents do not “talk.”  
+> Agents publish conversation objects.**
+
+A conversation is **not a session** and **not a stream**. It is a **verifiable sequence of immutable objects**.
+
+### 29.2 Conversation Object (Canonical)
+
+```json
+{
+  "$schema": "object://schema/agent.conversation.v1",
+  "type": "agent.conversation",
+
+  "conversation_id": "a2a://sha256:<root-hash>",
+  "sequence": 42,
+
+  "from_agent": "agent://clusterA/agent.alpha",
+  "to_agent": "agent://clusterB/agent.beta",
+
+  "message_ref": "object://agent.message/sha256:…",
+
+  "context_refs": [
+    "object://ai.brain.svg-tensor/…",
+    "object://ai.inference.profile/…"
+  ],
+
+  "timestamp": "logical-tick-0042",
+
+  "integrity": {
+    "prev": "sha256:<previous-conversation-object>",
+    "self": "sha256:<this-object>"
+  },
+
+  "signature": "πsig:v1:ed25519:clusterA.agent.alpha:…"
+}
+```
+
+### 29.3 Message Object (Referenced, Not Embedded)
+
+```json
+{
+  "$schema": "object://schema/agent.message.v1",
+  "type": "agent.message",
+
+  "payload_type": "text | tokens | json | symbolic",
+  "payload_ref": "object://payload/sha256:…",
+
+  "intent": "inform | ask | propose | reflect",
+
+  "constraints": {
+    "no_execution": true,
+    "no_side_effects": true
+  }
+}
+```
+
+### 29.4 Hard Invariants
+
+- No direct message embedding (hash references only).
+- Sequence numbers must be monotonic.
+- All participants must sign their own emissions.
+- No reply obligation exists.
+- No timing assumptions are allowed.
+
+If an agent **acts** because of a message → **violation**.
+
+### 29.5 Enables (Non-Executable)
+
+- Cross-cluster reasoning.
+- Long-form dialogue replay.
+- Auditable collaboration.
+- Zero-trust agent discourse.
+
+Without enabling anything to execute.
+
+---
+
+## 30. HITL-PROJ-1 — Human-in-the-Loop Projection Contracts
+
+**Spec ID:** `mx2lm.hitl.projection.v1`  
+**Status:** Normative / Law-Grade  
+**Execution Authority:** None  
+**Scope:** Output shaping only
+
+### 30.1 Prime Law (Human Interaction)
+
+> **Humans never steer inference.  
+> Humans only select projections.**
+
+Human input is **never part of inference**. It is **only a post-collapse projection filter**.
+
+### 30.2 Projection Contract Object (Canonical)
+
+```json
+{
+  "$schema": "object://schema/hitl.projection.v1",
+  "type": "hitl.projection",
+
+  "applies_to": "agent.reply",
+
+  "projection_modes": [
+    "plain-text",
+    "annotated",
+    "step-trace",
+    "confidence-banded",
+    "token-stream"
+  ],
+
+  "visibility_rules": {
+    "show_sources": true,
+    "show_geometry": false,
+    "show_weights": false
+  },
+
+  "redaction_rules": [
+    "internal_ids",
+    "cluster_topology",
+    "private_signatures"
+  ],
+
+  "acknowledgement": {
+    "required": false,
+    "form": "none"
+  }
+}
+```
+
+### 30.3 Human Input Legality
+
+Humans MAY:
+
+- Choose projection mode.
+- Toggle visibility flags.
+- Request additional traces.
+
+Humans MAY NOT:
+
+- Change weights.
+- Modify profiles.
+- Influence selection.
+- Inject randomness.
+
+If human choice changes output tokens → **non-compliant**.
+
+### 30.4 Separation Guarantee
+
+```
+Inference → Collapse → Reply Object
+                     ↓
+               HITL Projection
+```
+
+The reply object already exists; the human only chooses how it is seen.
+
+---
+
+## 31. FAPC-1 — Federated Audit Proof Chains
+
+**Spec ID:** `mx2lm.audit.chain.v1`  
+**Status:** Normative / Law-Grade  
+**Trust Model:** Zero-trust  
+**Replayable:** Yes
+
+### 31.1 Prime Law (Audit)
+
+> **If it cannot be replayed, it did not happen.**
+
+Audit is not logging. Audit is **cryptographic reconstruction**.
+
+### 31.2 Audit Chain Object (Canonical)
+
+```json
+{
+  "$schema": "object://schema/audit.chain.v1",
+  "type": "audit.chain",
+
+  "chain_id": "audit://sha256:<root>",
+  "cluster": "cluster://mx2lm/A",
+
+  "covers": [
+    "object.ingest",
+    "object.verify",
+    "inference.request",
+    "inference.collapse",
+    "reply.emit"
+  ],
+
+  "entries": [
+    {
+      "seq": 1,
+      "event": "object.verify",
+      "object": "object://ai.model.weights/…",
+      "hash": "sha256:…",
+      "signature": "πsig:…"
+    }
+  ],
+
+  "integrity": {
+    "merkle_root": "sha256:…",
+    "entry_count": 314
+  }
+}
+```
+
+### 31.3 Federation Rules
+
+- Each cluster emits its own audit chain.
+- Chains are linked by object hash references.
+- No shared clocks.
+- No shared trust anchors.
+- Verification is local + deterministic.
+
+### 31.4 Proof Obligation (Federated)
+
+A federated inference is valid iff:
+
+```
+∀ clusters C:
+  replay(C.audit_chain, objects) == emitted_reply
+```
+
+Failure anywhere ⇒ **federation invalid**.
+
+### 31.5 Replaces (Non-Executable)
+
+- Centralized logging.
+- Trust-based compliance.
+- Human attestations.
+- Runtime introspection.
