@@ -1051,4 +1051,277 @@ This section freezes the **cluster-aware object server** and its **normative sch
 
 ---
 
+## 14. MX2LM Object Server — AI Interpretation Layer
+
+This section maps AI artifacts into **objects + projections**, keeping Object Server law unchanged.
+
+### 14.1 Core Reframe (AI Context)
+
+In AI mode, the Object Server is:
+
+- a model artifact interpreter
+- a tokenization law enforcer
+- a weight + brain projection host
+- a deterministic inference projector
+- an agent reply constructor
+
+It does **not**:
+
+- train
+- optimize
+- backprop
+- sample stochastically
+- invent decoding rules
+
+No inference rule may exist outside an object.
+
+### 14.2 AI Request Lifecycle (Mapped)
+
+```
+prompt_request
+  │
+  ▼
+Resolve Objects
+(tokenizer, vocab, brain, weights)
+  │
+  ▼
+Load Artifacts
+(vocab, safetensors, svg-brain)
+  │
+  ▼
+Verify Invariants
+(hash, shape, legality)
+  │
+  ▼
+Project Inference
+(matrix ops, n-gram traversal)
+  │
+  ▼
+Project Reply
+(tokens → text)
+  │
+  ▼
+Emit Trace Events
+(optional diagnostics)
+```
+
+### 14.3 Canonical AI Objects
+
+| Object Type         | Purpose                       |
+| ------------------- | ----------------------------- |
+| `tokenizer`         | Text → token indices          |
+| `vocab`             | Token ↔ symbol mapping        |
+| `model.weights`     | Neural weight tensors         |
+| `brain.ngram`       | Symbolic / statistical memory |
+| `brain.svg`         | SVG / SVG-3D tensor brain     |
+| `inference.profile` | Matrix traversal rules        |
+| `agent.reply`       | Final response projection     |
+
+Each is an object, not code.
+
+### 14.4 Tokenizer Object
+
+```json
+{
+  "id": "object://ai/tokenizer/bpe-en-v1",
+  "hash": "sha256:…",
+  "payload": {
+    "type": "json",
+    "mime": "application/json",
+    "location": "./tokenizer.json"
+  },
+  "authority": "none",
+  "invariants": [
+    "deterministic",
+    "no_execution",
+    "fixed_vocab"
+  ],
+  "projections": {
+    "encode": {
+      "type": "token-stream",
+      "emit": "@payload.rules"
+    }
+  }
+}
+```
+
+### 14.5 Vocabulary Object
+
+```json
+{
+  "id": "object://ai/vocab/base-v1",
+  "hash": "sha256:…",
+  "payload": {
+    "type": "json",
+    "location": "./vocab.json"
+  },
+  "invariants": [
+    "immutable_payload",
+    "one_to_one_mapping"
+  ],
+  "projections": {
+    "lookup": {
+      "type": "symbol-map",
+      "emit": "@payload.tokens"
+    }
+  }
+}
+```
+
+### 14.6 Weight Object (`model.safetensors`)
+
+```json
+{
+  "id": "object://ai/model/phi2/weights",
+  "hash": "sha256:…",
+  "payload": {
+    "type": "binary",
+    "mime": "application/x-safetensors",
+    "location": "./model.safetensors"
+  },
+  "authority": "none",
+  "invariants": [
+    "no_execution",
+    "shape_consistent",
+    "immutable_payload"
+  ],
+  "projections": {
+    "matrix": {
+      "type": "tensor-view",
+      "emit": "@payload"
+    }
+  }
+}
+```
+
+### 14.7 SVG Brain Object (Tensor Brain)
+
+```json
+{
+  "id": "object://ai/brain/svg-ngram-v1",
+  "hash": "sha256:…",
+  "payload": {
+    "type": "binary",
+    "mime": "image/svg+xml",
+    "location": "./brain.svg"
+  },
+  "invariants": [
+    "no_visual_requirement",
+    "geometry_is_weight",
+    "deterministic_traversal"
+  ],
+  "projections": {
+    "graph": {
+      "type": "tensor-graph",
+      "emit": "@payload"
+    }
+  }
+}
+```
+
+Invariant: SVG is geometry, not UI. Paths = probability curves; groups = memory clusters.
+
+### 14.8 N-Gram Brain Object
+
+```json
+{
+  "id": "object://ai/brain/ngram-en-v1",
+  "hash": "sha256:…",
+  "payload": {
+    "type": "json",
+    "location": "./ngrams.json"
+  },
+  "invariants": [
+    "order_fixed",
+    "deterministic"
+  ],
+  "projections": {
+    "transition": {
+      "type": "probability-map",
+      "emit": "@payload.ngrams"
+    }
+  }
+}
+```
+
+### 14.9 Inference Profile Object
+
+```json
+{
+  "id": "object://ai/inference/matrix-v1",
+  "hash": "sha256:…",
+  "payload": {
+    "type": "json",
+    "location": "./inference.json"
+  },
+  "invariants": [
+    "no_sampling",
+    "deterministic",
+    "no_external_state"
+  ],
+  "projections": {
+    "apply": {
+      "type": "matrix-projection",
+      "emit": {
+        "weights": "@object.model.weights",
+        "brain": "@object.brain.svg",
+        "ngrams": "@object.brain.ngram"
+      }
+    }
+  }
+}
+```
+
+### 14.10 Agent Reply Object
+
+```json
+{
+  "id": "object://ai/agent/reply/default",
+  "hash": "sha256:…",
+  "payload": {
+    "type": "json",
+    "location": "./reply.json"
+  },
+  "authority": "none",
+  "projections": {
+    "text": {
+      "type": "string",
+      "emit": "@payload.tokens"
+    }
+  }
+}
+```
+
+### 14.11 Agent Response = Object Graph Collapse
+
+```
+prompt
+ → tokenizer object
+ → vocab object
+ → weight object
+ → svg brain
+ → n-gram brain
+ → inference profile
+ → reply projection
+```
+
+Same objects + same hashes = same response (unless an object encodes randomness).
+
+### 14.12 What This Eliminates
+
+- prompt magic
+- hidden sampling
+- temperature hacks
+- framework-specific decoding
+- model server logic blobs
+- nondeterministic replies
+
+Result: traceable cognition, inspectable brains, replayable inference, audit-grade behavior.
+
+### 14.13 MX2LM Truth Statement
+
+**MX2LM is not an AI model. MX2LM is an object law system that interprets intelligence artifacts.**
+
+---
+
 **Source:** distilled from `todo.md` to provide an actionable, high-signal blueprint for implementation and design reviews.
