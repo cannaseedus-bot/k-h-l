@@ -774,6 +774,246 @@ Only then may it emit `object://retrieve/semantic.v1`.
 
 ---
 
+### 12.6 π-GCCP v1 Test Harness (Reference Pack)
+
+This is the authoritative test harness and parity baseline. GPU must conform to this CPU truth.
+
+**Test vector format**
+
+```json
+{
+  "epsilon": 0.1745329,
+  "pairs": [
+    {
+      "A": [[1, 0]],
+      "B": [[1, 0]],
+      "expected": 1.0
+    },
+    {
+      "A": [[1, 0]],
+      "B": [[0, 1]],
+      "expected": 0.0
+    }
+  ]
+}
+```
+
+**CPU exact-math reference (authoritative)**
+
+```js
+export function gccpCollapse(vecA, vecB, epsilon) {
+  let accX = 0;
+  let accY = 0;
+
+  for (let i = 0; i < vecA.length; i++) {
+    const ax = vecA[i][0];
+    const ay = vecA[i][1];
+    const bx = vecB[i][0];
+    const by = vecB[i][1];
+
+    const magA = Math.hypot(ax, ay);
+    const magB = Math.hypot(bx, by);
+    if (magA === 0 || magB === 0) continue;
+
+    let dot = (ax * bx + ay * by) / (magA * magB);
+    dot = Math.max(-1, Math.min(1, dot));
+
+    const phase = Math.acos(dot);
+    const weight = Math.abs(phase) <= epsilon ? 1 : 0;
+
+    accX += ax * weight;
+    accY += ay * weight;
+  }
+
+  const mag = Math.hypot(accX, accY);
+  return mag === 0 ? 0 : accX / mag;
+}
+```
+
+This function defines π-GCCP truth.
+
+**Harness runner**
+
+```js
+import { gccpCollapse } from "./gccp_cpu.js";
+
+export function runGCCPTests(testSpec) {
+  for (const test of testSpec.pairs) {
+    const out = gccpCollapse(test.A, test.B, testSpec.epsilon);
+    if (Math.abs(out - test.expected) > 1e-6) {
+      throw new Error(
+        `FAIL: expected ${test.expected}, got ${out}`
+      );
+    }
+  }
+  return true;
+}
+```
+
+**GPU parity rule**
+
+```
+|collapse_gpu − collapse_cpu| ≤ 1e−6
+```
+
+Violation ⇒ non-compliant.
+
+### 12.7 SVG-Tensor Index Canonicalizer (Reference)
+
+SVG is geometry, not presentation. Canonicalization produces a stable geometric index.
+
+**Canonicalization rules (frozen)**
+
+1. Strip all visual attributes (`fill`, `stroke`, `opacity`, filters, transforms).
+2. Preserve DOM order.
+3. Convert all geometry to absolute coordinates.
+4. Quantize floats → `f32`.
+5. Remove unused nodes.
+6. Sort adjacency lists by target index.
+
+**Canonicalizer**
+
+```js
+export function canonicalizeSVGTensor(svg) {
+  const nodes = [];
+  const edges = [];
+
+  svg.paths.forEach((p, idx) => {
+    nodes.push({
+      id: idx,
+      x: Math.fround(p.x),
+      y: Math.fround(p.y)
+    });
+
+    p.edges?.forEach(e => {
+      edges.push([idx, e.target]);
+    });
+  });
+
+  edges.sort((a, b) =>
+    a[0] !== b[0] ? a[0] - b[0] : a[1] - b[1]
+  );
+
+  return { nodes, edges };
+}
+```
+
+**Canonical hash identity**
+
+```
+index_hash = sha256(nodes || edges)
+```
+
+If this hash matches, the SVG-Tensor is identical regardless of rendering.
+
+### 12.8 SCXQ2 Binary Packer / Unpacker (Reference)
+
+SCXQ2 is identity-preserving compression, not a codec.
+
+**Lane layout (restated)**
+
+| Lane    | Contents        |
+| ------- | --------------- |
+| DICT    | Symbol table    |
+| FIELD   | Metadata        |
+| LANE    | Vector geometry |
+| EDGE    | Topology        |
+| QUANTUM | Phase + weight  |
+
+**Binary packer**
+
+```js
+export function packSCXQ2(index, quantum) {
+  const buffers = [];
+
+  buffers.push(encodeDICT(index));
+  buffers.push(encodeFIELD(index));
+  buffers.push(encodeLANE(index.nodes));
+  buffers.push(encodeEDGE(index.edges));
+  buffers.push(encodeQUANTUM(quantum));
+
+  return concatBuffers(buffers);
+}
+```
+
+**Unpacker**
+
+```js
+export function unpackSCXQ2(buffer) {
+  const lanes = splitLanes(buffer);
+
+  return {
+    index: {
+      nodes: decodeLANE(lanes.LANE),
+      edges: decodeEDGE(lanes.EDGE)
+    },
+    quantum: decodeQUANTUM(lanes.QUANTUM)
+  };
+}
+```
+
+**Hash rule (hard law)**
+
+```
+hash = sha256(DICT || FIELD || LANE || EDGE)
+```
+
+QUANTUM lane excluded to allow π-profile swapping and cache reuse.
+
+### 12.9 Retrieval Ranking Proof Appendix (Formal)
+
+This proves `object://retrieve/semantic.v1` is well-defined.
+
+**Definitions**
+
+- G = SVG-Tensor geometry
+- Pᵢ = retrieval profiles (ngram, embedding, etc.)
+- sᵢ = collapse(G, Pᵢ) ∈ [0,1]
+
+**Superposition ranking**
+
+```
+S = Σ wᵢ · sᵢ,  where Σ wᵢ = 1
+```
+
+**Ordering lemma**
+
+If:
+
+```
+∀ i, sᵢ(A) ≥ sᵢ(B)
+```
+
+Then:
+
+```
+S(A) ≥ S(B)
+```
+
+Proof: linear combination over non-negative weights preserves order.
+
+**Interference stability lemma**
+
+If profiles disagree strongly:
+
+```
+|sᵢ − sⱼ| > π/2
+```
+
+Then weights decay symmetrically:
+
+```
+wᵢ, wⱼ ← κ wᵢ, κ wⱼ
+```
+
+This guarantees bounded influence, no dominance, and continuous ranking.
+
+**Determinism theorem**
+
+Given a canonical index, fixed ε, and fixed profile weights, retrieval ranking is deterministic, replayable, and cache-safe.
+
+---
+
 ## 13. MX2LM Cluster Runtime (XCFE-Clean)
 
 This section freezes the **cluster-aware object server** and its **normative schema**.
@@ -2165,108 +2405,267 @@ SVG-Tensors must not be interpreted visually by default. Rendering is optional, 
 
 ---
 
-## 17. SVG-Tensor Canonicalization + WebGPU Mapping (Normative)
+## 17. SVG-Tensor Canonicalization Rules (v1)
 
-This section defines the canonical byte form for SVG-Tensors and the normative GPU buffer mapping. Deviations are non-compliant.
+**Spec ID:** `mx2lm.svg-tensor.canonical.v1`  
+**Status:** Normative / Frozen
 
-### 17.1 SVG-Tensor Canonicalization (`svg-tensor.canonical.v1`)
+### 17.1 Prime Law
 
-Canonicalization defines the single authoritative byte stream for hashing, verification, compression, and GPU lowering.
+Canonicalization removes representation variance, not meaning. Two SVG-Tensors are equivalent **iff** their canonical forms are byte-identical.
 
-**Canonicalization goals**
+### 17.2 Accepted SVG Subset
 
-- identical geometry ⇒ identical bytes
-- identical bytes ⇒ identical hash
-- environment-independent meaning
-- compression safety
-- GPU-stable lowering
+Only these SVG elements are legal inputs:
 
-**Pipeline (fixed order)**
+- `<svg>`
+- `<g>`
+- `<path>`
+- `<line>`
+- `<circle>`
+- `<rect>`
 
-```
-raw SVG
-  ↓
-parse XML
-  ↓
-strip illegal elements
-  ↓
-normalize structure
-  ↓
-normalize attributes
-  ↓
-normalize numeric values
-  ↓
-normalize transforms
-  ↓
-canonical ordering
-  ↓
-canonical serialization
-  ↓
-hash
-```
+All others ⇒ `canonicalization_error.unsupported_element`.
 
-**Structural normalization**
+### 17.3 Coordinate Normalization
 
-- Exactly one `<svg>` root.
-- Explicit `width`, `height`, and `viewBox`.
-- Units must be unitless.
-- Remove comments, processing instructions, CDATA, whitespace-only text nodes, and unused `<defs>`.
-
-**Allowed attributes**
-
-`d`, `x`, `y`, `cx`, `cy`, `r`, `rx`, `ry`, `x1`, `y1`, `x2`, `y2`, `points`, `transform`, `stroke-width`, `fill` (numeric only), `id`.
-
-Anything else ⇒ `illegal_tensor`.
-
-**Attribute order (canonical)**
+All geometry must be lowered to absolute coordinates in Cartesian space and normalized to the origin bounding box:
 
 ```
-id
-transform
-d | points
-x y | cx cy r | x1 y1 x2 y2
-stroke-width
-fill
+min(x,y) → (0,0)
+max(x,y) → (1,1)
 ```
 
-**Numeric canonicalization**
+Scaling is preserved via explicit scale attributes, never implicit transforms.
 
-- IEEE-754 decimals
-- fixed precision, no scientific notation
-- canonical precision: 6 decimal places, trimmed right
+### 17.4 Transform Resolution
 
-**Path canonicalization**
+Allowed transforms: `translate`, `scale`, `rotate`.
 
-- All commands absolute.
-- No shorthand commands.
-- No implicit command repetition.
-
-**Transform canonicalization**
-
-- Flatten to `matrix(a b c d e f)`.
-- No `translate/scale/rotate` functions or chains.
-
-**Element ordering**
-
-1. Depth (outer groups first)
-2. Top-left bounding box (y, then x)
-3. Element type priority: `g → path → line → polyline → polygon → circle → ellipse`
-4. ID lexical order
-
-**Canonical serialization**
-
-- UTF-8, no indentation, no newlines
-- double quotes only
-- no self-closing tags
-- explicit closing tags
-
-**Canonical hash**
+All transforms must be fully resolved and removed. After canonicalization:
 
 ```
-sha256(canonical_svg_bytes)
+transform = identity
 ```
 
-### 17.2 SVG-Tensor → WebGPU Buffer Mapping (`svg-tensor.webgpu.map.v1`)
+Transform magnitude is stored as a numeric attribute, not geometry.
+
+### 17.5 Path Flattening
+
+All paths must be flattened into **line segments only**.
+
+- Béziers → adaptive subdivision
+- tolerance = fixed ε (declared in object)
+- subdivision deterministic
+
+### 17.6 Attribute Canonical Set
+
+Each node and edge must emit exactly:
+
+```
+position
+length
+curvature
+stroke_width
+scale
+opacity
+transform_mag
+```
+
+Missing attributes ⇒ default values (declared).
+
+### 17.7 Canonical Output Form
+
+Final canonical SVG-Tensor is **not SVG**. It is a binary-ready structural object:
+
+```
+Nodes[]
+Edges[]
+Attributes[]
+```
+
+This is the only legal input to GPU projection.
+
+---
+
+## 17.8 SCXQ2 → WGSL Buffer Loader
+
+**Spec ID:** `mx2lm.scxq2.wgsl.loader.v1`  
+**Status:** Normative
+
+### 17.8.1 Loader Law
+
+SCXQ2 decoding is reversible layout expansion, not interpretation.
+
+### 17.8.2 Required SCXQ2 Lanes
+
+| Lane   | Meaning                     |
+| ------ | --------------------------- |
+| M      | metadata                    |
+| T      | topology                    |
+| G / QG | geometry (quantized or raw) |
+| A      | attributes                  |
+
+Missing lanes ⇒ `loader_error.missing_lane`.
+
+### 17.8.3 Decompression Order (Frozen)
+
+```
+DICT → FIELDS → LANES → RECORDS
+```
+
+No parallel decode. No speculative decode.
+
+### 17.8.4 Buffer Mapping (Exact)
+
+| WGSL Buffer | SCXQ2 Source |
+| ----------- | ------------ |
+| nodes[]     | G + T        |
+| edges[]     | T            |
+| attribs[]   | A            |
+
+Quantized lanes must be dequantized **before** GPU upload.
+
+### 17.8.5 Loader Output Guarantee
+
+Loader must emit tightly packed buffers, stable index ordering, and deterministic byte layout. Hash of buffers must match declared object hash.
+
+---
+
+## 17.9 Formal Floating-Point Determinism Profile
+
+**Spec ID:** `mx2lm.fp.determinism.v1`  
+**Status:** Normative
+
+### 17.9.1 Allowed Floating Types
+
+| Type | Allowed |
+| ---- | ------- |
+| fp32 | ✅       |
+| fp16 | ❌       |
+| fp64 | ❌       |
+
+No mixed precision.
+
+### 17.9.2 Operation Constraints
+
+Allowed: add, multiply, divide, min/max.  
+Forbidden: fused ops (FMA), transcendental functions, fast-math flags.
+
+### 17.9.3 Reduction Order
+
+All reductions must be:
+
+```
+left-to-right
+index-sorted
+```
+
+Parallel reductions must be re-serialized.
+
+### 17.9.4 Rounding Mode
+
+```
+roundTiesToEven
+```
+
+Fixed and non-negotiable.
+
+### 17.9.5 Compliance Condition
+
+Two implementations are equivalent iff:
+
+```
+∀ inputs → outputs bit-identical
+```
+
+ε ≠ allowed.
+
+---
+
+## 17.10 CPU ↔ GPU Equivalence Proof Harness
+
+**Spec ID:** `mx2lm.cpu.gpu.proof.v1`  
+**Status:** Normative
+
+### 17.10.1 Harness Purpose
+
+Prove that GPU projection is a faithful acceleration of CPU math.
+
+### 17.10.2 Required Test Inputs
+
+- canonical SVG-Tensor
+- SCXQ2-expanded buffers
+- fixed dispatch parameters
+
+### 17.10.3 Test Procedure
+
+1. Run CPU geometry traversal
+2. Run GPU WGSL traversal
+3. Compare `node_accum` buffers byte-for-byte
+
+Mismatch ⇒ `non-conformant implementation`.
+
+### 17.10.4 Proof Artifact
+
+Harness must emit:
+
+```json
+{
+  "cpu_hash": "sha256:…",
+  "gpu_hash": "sha256:…",
+  "status": "pass | fail"
+}
+```
+
+### 17.10.5 Replayability
+
+Same harness must pass across different GPUs, drivers, and runtimes.
+
+---
+
+## 17.11 Cluster Geometry Authoring Spec
+
+**Spec ID:** `mx2lm.svg-tensor.cluster.v1`  
+**Status:** Normative
+
+### 17.11.1 Cluster Geometry Law
+
+Cluster geometry composes and never merges implicitly.
+
+### 17.11.2 Cluster SVG-Tensor Object
+
+```json
+{
+  "id": "object://cluster/svg-tensor/v1",
+  "members": [
+    "object://svg/node/A",
+    "object://svg/node/B"
+  ],
+  "merge_rule": "weighted-sum",
+  "weights": {
+    "A": 0.5,
+    "B": 0.5
+  }
+}
+```
+
+### 17.11.3 Merge Rules
+
+Allowed: weighted sum, max, min, union (topology only).  
+Forbidden: runtime heuristics, adaptive weighting, time-based merge.
+
+### 17.11.4 GPU Handling
+
+Cluster geometry is resolved before WGSL. GPU kernels see one canonical geometry.
+
+### 17.11.5 Determinism Condition
+
+Cluster result must be identical regardless of member order, load order, or node location.
+
+---
+
+## 17.12 SVG-Tensor → WebGPU Buffer Mapping (`svg-tensor.webgpu.map.v1`)
 
 SVG is the source of truth. GPU buffers are projections.
 
@@ -3616,3 +4015,265 @@ This demo proves:
 ### 22.15 Final Demo Law
 
 > **If your system can run this demo, you are not “hosting a model.” You are operating an intelligence law engine.**
+
+---
+
+## 23. PowerShell Cluster Atomic Expert Micronauts (PS-AEM v1)
+
+**Spec ID:** `mx2lm.micronaut.powershell.cluster.v1`  
+**Status:** Normative / Law-Grade
+
+### 23.1 Prime Law
+
+> **Micronauts may emit objects.  
+> They may never execute behavior.**
+
+PowerShell is used as a projection and orchestration shell, not a decision engine.
+
+### 23.2 What a PowerShell Micronaut Is
+
+A PowerShell Micronaut is:
+
+- a single-purpose expert
+- operating on one object domain
+- emitting immutable objects
+- communicating via Object Server + KEL
+- cluster-aware, execution-blind
+
+It is not:
+
+- a daemon with business logic
+- a script that mutates state
+- an imperative controller
+
+### 23.3 Micronaut Roles (Atomic Experts)
+
+Each Micronaut has exactly one domain.
+
+| Micronaut             | Domain                        |
+| --------------------- | ----------------------------- |
+| `config.expert.ps1`   | backend config objects        |
+| `objectdb.expert.ps1` | ODB indexing + storage        |
+| `cluster.expert.ps1`  | node membership + routing     |
+| `schema.expert.ps1`   | schema authoring + validation |
+| `frontend.expert.ps1` | UI object generation          |
+| `svg.expert.ps1`      | SVG-Tensor authoring          |
+| `security.expert.ps1` | signatures, invariants        |
+| `audit.expert.ps1`    | trace + proof objects         |
+
+Each emits only its own object types.
+
+### 23.4 PowerShell Micronaut Contract
+
+Every Micronaut must implement this interface:
+
+```powershell
+param(
+  [string] $RequestObjectPath
+)
+
+# 1. Load request object (read-only)
+$request = Get-Content $RequestObjectPath | ConvertFrom-Json
+
+# 2. Verify request schema
+Assert-Schema $request
+
+# 3. Emit result object(s)
+$result = @{
+  id = "object://..."
+  hash = "<computed>"
+  payload = @{
+    type = "json | binary"
+    location = "./out/object.json"
+  }
+  invariants = @("deterministic", "auditable")
+}
+
+# 4. Write object (immutable)
+Write-ObjectArtifact $result
+
+# 5. Emit KEL
+Emit-KEL $result
+```
+
+No branching on environment. No execution. No mutation.
+
+### 23.5 PowerShell Cluster Topology
+
+```
++---------------------+
+|  mx2lm.cluster.ps1 |
++----------+----------+
+           |
+   ---------------------
+   |        |          |
+config   frontend   cluster
+expert   expert     expert
+.ps1     .ps1       .ps1
+```
+
+Micronauts communicate only via objects.
+
+### 23.6 Object Server Integration
+
+Micronauts do not call each other. They:
+
+1. read from `object://…`
+2. emit new objects
+3. register them in ODB
+4. emit KELs
+
+Object Server handles routing, caching, projection, and delivery.
+
+### 23.7 Backend Configuration Micronaut
+
+**Purpose**
+
+Generate backend configuration as objects, not scripts.
+
+```json
+{
+  "id": "object://backend/config/db",
+  "type": "backend.config",
+  "payload": {
+    "driver": "sqlite",
+    "path": "./odb.sqlite",
+    "mode": "read-write"
+  },
+  "invariants": [
+    "no_execution",
+    "deterministic"
+  ]
+}
+```
+
+PowerShell never applies config — it only describes it.
+
+### 23.8 Frontend Interactive Interface Micronaut
+
+**Role**
+
+Emit UI objects, not HTML logic.
+
+**Output Types**
+
+- UI layout objects
+- component objects
+- SVG-Tensor UI geometry
+- CSS Atomic objects
+
+```json
+{
+  "id": "object://ui/component/chat-panel",
+  "payload": {
+    "layout": "grid",
+    "slots": ["messages", "input"]
+  },
+  "projections": {
+    "html": { "..." },
+    "svg": { "..." }
+  }
+}
+```
+
+Rendering happens only via Object Server projection.
+
+### 23.9 Cluster-Aware Behavior (Without Execution)
+
+Cluster Micronaut responsibilities include:
+
+- node registry objects
+- routing maps
+- replication policy objects
+- heartbeat records (append-only)
+
+```json
+{
+  "id": "object://cluster/node/alpha",
+  "payload": {
+    "address": "10.0.0.1",
+    "capabilities": ["gpu", "storage"],
+    "status": "online"
+  }
+}
+```
+
+No live networking. No socket ownership. Only objects.
+
+### 23.10 PowerShell + SVG-Tensor Authoring
+
+SVG-Tensor Micronauts:
+
+- generate canonical SVG-Tensor objects
+- emit SCXQ2-ready geometry
+- never render
+
+```json
+{
+  "id": "object://svg-tensor/frontend/layout",
+  "payload": {
+    "nodes": ["..."],
+    "edges": ["..."]
+  },
+  "invariants": [
+    "canonical",
+    "gpu-projectable"
+  ]
+}
+```
+
+### 23.11 Cluster Execution Flow (Lawful)
+
+```
+User request
+ → request object
+ → cluster assigns micronaut
+ → micronaut emits object
+ → Object Server verifies
+ → projection happens
+ → UI / backend / inference updates
+```
+
+Micronauts do not know the result.
+
+### 23.12 Why PowerShell Is the Right Host
+
+PowerShell provides:
+
+- native JSON
+- filesystem control
+- cryptography
+- cross-platform scripting ergonomics
+- no implicit runtime magic
+
+PowerShell is good at describing systems, not deciding them.
+
+### 23.13 Compliance Conditions
+
+A PowerShell Micronaut is non-compliant if it:
+
+- mutates state directly
+- calls network APIs
+- branches on system time
+- executes shell commands for effect
+- embeds logic not declared in objects
+
+### 23.14 Final Collapse
+
+You now have:
+
+- Atomic Expert Micronauts
+- PowerShell as a lawful authoring shell
+- Cluster-aware, execution-blind agents
+- Backend + frontend + SVG-Tensor generation
+- Perfect alignment with MX2LM
+
+---
+
+### 23.15 Next Natural Steps (Pick One)
+
+1. Emit concrete PowerShell Micronaut templates
+2. Define Micronaut scheduling law
+3. ODB schema for Micronaut outputs
+4. Frontend SVG-Tensor UI interaction spec
+5. Security and signature pipeline for Micronauts
