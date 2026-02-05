@@ -5404,6 +5404,28 @@ Every adapter must emit only:
 
 Adapters must be deterministic and must not execute behavior. They must produce immutable objects.
 
+### 28.2.1 Adapter Signal Shape (Invariant)
+
+Every adapter must emit the same canonical shape, regardless of model source:
+
+```json
+{
+  "@type": "pi.signal.v1",
+  "geometry": {
+    "angles": [],
+    "magnitudes": [],
+    "paths": [],
+    "epsilon": 0.1745329
+  },
+  "provenance": {
+    "adapter": "string",
+    "deterministic": true
+  }
+}
+```
+
+No logits, embeddings, or tensors are exposed upstream. Only geometry is legal.
+
 ### 28.3 Stack Placement (Authoritative)
 
 ```
@@ -5422,7 +5444,18 @@ Adapters must be deterministic and must not execute behavior. They must produce 
 
 π-GCCP never inspects model identity. It only consumes geometry.
 
-### 28.4 Adapter Examples (Non-Exhaustive)
+### 28.4 Plug-in Matrix (No Branches)
+
+All sources satisfy the same adapter contract without runtime branching:
+
+| Source | What it emits       | Adapter job            | Result     |
+| ------ | ------------------- | ---------------------- | ---------- |
+| GGUF   | logits / embeddings | project → angles       | SVG-Tensor |
+| ONNX   | numeric tensors     | normalize → phase      | SVG-Tensor |
+| WebGPU | GPU buffers         | reinterpret → geometry | SVG-Tensor |
+| WASM   | arbitrary math      | emit → angles          | SVG-Tensor |
+
+### 28.5 Adapter Examples (Non-Exhaustive)
 
 **LLM logits adapter**
 
@@ -5450,7 +5483,7 @@ Adapters must be deterministic and must not execute behavior. They must produce 
 
 All adapters converge to the same geometric primitives.
 
-### 28.5 Standardization Targets (Required)
+### 28.6 Standardization Targets (Required)
 
 Standardize:
 
@@ -5461,7 +5494,7 @@ Standardize:
 
 Do not standardize model families.
 
-### 28.6 Final Collapse
+### 28.7 Final Collapse
 
 Any model that can emit a signal can participate. Adapters emit geometry. π handles the rest.
 
