@@ -5170,6 +5170,266 @@ You now have:
 
 ---
 
+## 26.18 AGENT-TOOLS-1 — Agent Tool Surfaces as Objects (Non-Executing)
+
+**Spec ID:** `mx2lm.agent.tools.v1`  
+**Status:** Normative / Law-Grade
+
+### 26.18.1 Tool Prime Law
+
+> **A tool MAY describe capability.  
+> A tool MAY expose structure.  
+> A tool MAY NOT execute, mutate, or decide.**
+
+Tools exist to inform inference, not to perform work.
+
+### 26.18.2 Tool Definition (Canonical)
+
+```
+tool = {
+  identity,
+  surface_schema,
+  input_shape,
+  output_shape,
+  constraints,
+  projections
+}
+```
+
+There is no function body, no handler, no runtime hook.
+
+### 26.18.3 Canonical Tool Object Schema
+
+```json
+{
+  "$schema": "object://schema/agent.tool.v1",
+  "id": "object://agent/tool/search.docs",
+  "type": "agent.tool",
+  "description": "Search indexed documentation corpus",
+  "inputs": {
+    "query": "string",
+    "limit": "integer"
+  },
+  "outputs": {
+    "results": "array<doc_ref>"
+  },
+  "constraints": [
+    "read_only",
+    "no_side_effects",
+    "non_executing"
+  ],
+  "projections": {
+    "symbolic": {
+      "type": "tool-symbol",
+      "emit": {
+        "name": "@id",
+        "inputs": "@inputs",
+        "outputs": "@outputs"
+      }
+    }
+  }
+}
+```
+
+This object never runs. It only shapes inference space.
+
+### 26.18.4 Inference Participation (Symbolic)
+
+Tools influence inference only as symbols:
+
+```
+prompt
+ → tokens
+ → symbols
+ → tool affordance symbols
+ → logits
+```
+
+The model may reference a tool — it may never invoke it.
+
+### 26.18.5 Tool Availability Binding (Agent-Scoped)
+
+```json
+{
+  "$schema": "object://schema/agent.tools.bindings.v1",
+  "agent": "agent://coder.bot.v1",
+  "tools": [
+    "object://agent/tool/search.docs",
+    "object://agent/tool/read.file"
+  ],
+  "invariants": [
+    "tool_visibility_only",
+    "no_execution"
+  ]
+}
+```
+
+If a tool is not bound, it does not exist to the agent.
+
+### 26.18.6 Tool Output Is Never Real Data
+
+Tool “results” are placeholders, references, and symbolic hints only.
+
+Example emitted reply:
+
+```
+"I would use tool:search.docs(query='SCXQ2')"
+```
+
+The client or operator decides what happens next — outside MX2LM.
+
+### 26.18.7 Forbidden Patterns (Hard Ban)
+
+Illegal in AGENT-TOOLS-1:
+
+- tool → function mapping
+- tool → HTTP call
+- tool → shell execution
+- tool → filesystem mutation
+- tool → callback hooks
+
+Any of these = non-compliant runtime.
+
+### 26.18.8 Final Lock
+
+> **Tools describe.  
+> Inference decides.  
+> Execution never enters.**
+
+---
+
+## 26.19 AGENT-FED-1 — Agent Federation Across Clusters
+
+**Spec ID:** `mx2lm.agent.federation.v1`  
+**Status:** Normative / Law-Grade
+
+### 26.19.1 Federation Prime Law
+
+> **Federation MAY share objects.  
+> Federation MAY route requests.  
+> Federation MAY NOT merge execution authority.**
+
+Clusters cooperate by object exchange, not behavior.
+
+### 26.19.2 Federated Agent Identity
+
+An agent is cluster-portable because it is just an object graph:
+
+```json
+{
+  "$schema": "object://schema/agent.federated.v1",
+  "agent_id": "agent://coder.bot.v1",
+  "origin_cluster": "cluster://us-west/alpha",
+  "brains": [
+    "object://ai/model/phi2/quantized/int8"
+  ],
+  "profiles": [
+    "object://ai/inference/profile/code"
+  ],
+  "hash": "sha256:…",
+  "signature": "πsig:v1:ed25519:cluster.root:…"
+}
+```
+
+No cluster-local assumptions.
+
+### 26.19.3 Federation Transport (Opaque)
+
+Federation transports:
+
+- agent identity objects
+- tool surface objects
+- inference requests
+- inference replies
+- audit logs
+
+Transport MAY be:
+
+- WebDAV
+- DNS-API
+- Object Server sync
+- Drive-sealed ODB
+- WebSocket streams
+
+Transport never interprets.
+
+### 26.19.4 Remote Inference Routing
+
+A cluster MAY forward an inference request:
+
+```
+local orchestrator
+ → federated route
+ → remote MX2LM
+ → reply object
+ → local projection
+```
+
+The request object must remain byte-identical.
+
+### 26.19.5 Cross-Cluster Trust Law
+
+A federated agent is trusted iff:
+
+```
+agent.hash matches
+agent.signature verifies
+brain hashes exist locally OR retrievable
+```
+
+No trust by hostname. No trust by IP. Only hash + signature.
+
+### 26.19.6 Federation Without State Leakage
+
+Agents across clusters:
+
+- share brains (sealed)
+- share profiles
+- share tools (symbolic)
+
+They do not share:
+
+- session state
+- memory
+- mutable objects
+- execution context
+
+### 26.19.7 Cluster Arbitration (Optional)
+
+If multiple clusters reply:
+
+```json
+{
+  "$schema": "object://schema/agent.federation.arbitration.v1",
+  "strategy": "first_valid",
+  "timeout_ms": 500
+}
+```
+
+Arbitration is declared, not emergent.
+
+### 26.19.8 Determinism Guarantee (Federated)
+
+Federation is compliant iff:
+
+```
+same request object
+same agent object
+same brains
+⇒ same reply
+```
+
+Regardless of which cluster served it.
+
+### 26.19.9 Final Lock
+
+> **Tools describe.  
+> Agents reference.  
+> Clusters exchange objects.  
+> Inference collapses truth.**
+
+---
+
 ## 27. π-Profile Authoring Format v1.0 (Authoritative)
 
 **Spec ID:** `mx2lm.pi-profile.authoring.v1`  
