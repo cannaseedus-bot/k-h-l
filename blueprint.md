@@ -1324,4 +1324,509 @@ Result: traceable cognition, inspectable brains, replayable inference, audit-gra
 
 ---
 
+## 15. Object Server Specification (v1.0.0)
+
+> **A server whose behavior is defined by the objects it serves, not by the code that hosts it.**
+
+**Version:** 1.0.0  
+**Status:** Specification
+
+### 15.1 Abstract
+
+An Object Server is a runtime that interprets governed objects and projects their meaning. It does not decide behavior — it only loads, verifies, and projects objects according to their declared specifications.
+
+**If the server contains logic, it is not an Object Server.**
+
+### 15.2 Core Definition
+
+**What an Object Server is:**
+
+- a governed interpreter for structured objects
+- a projection system, not an execution engine
+- a verification layer that enforces invariants
+- host-agnostic (implementation does not define behavior)
+
+**What an Object Server is not:**
+
+- a routing framework
+- a controller/service architecture
+- a config-driven application runner
+- an API gateway with business logic
+
+**Fundamental invariant:**
+
+```
+Objects have authority. Code does not.
+```
+
+### 15.3 Request Lifecycle
+
+```
+request
+  │
+  ▼
+┌─────────────────────┐
+│ 1. Resolve Identity │  ← Map request to object ID
+└─────────────────────┘
+  │
+  ▼
+┌─────────────────────┐
+│ 2. Load Object      │  ← Fetch descriptor + payload
+└─────────────────────┘
+  │
+  ▼
+┌─────────────────────┐
+│ 3. Verify Invariants│  ← Check hash, authority, constraints
+└─────────────────────┘
+  │
+  ▼
+┌─────────────────────┐
+│ 4. Select Projection│  ← Choose output representation
+└─────────────────────┘
+  │
+  ▼
+┌─────────────────────┐
+│ 5. Emit Response    │  ← Return projected data
+└─────────────────────┘
+  │
+  ▼
+┌─────────────────────┐
+│ 6. Emit Events      │  ← Lifecycle signals (optional)
+└─────────────────────┘
+```
+
+No step may invent behavior not declared in the object.
+
+### 15.4 Object Model
+
+**Structure**
+
+```
+object/
+├── descriptor    (object.json, object.xjson)
+└── payload       (any format: JSON, binary, media, etc.)
+```
+
+**Canonical descriptor schema**
+
+```json
+{
+  "$schema": "object://schema/object.v1",
+  "id": "object://domain/name",
+  "hash": "sha256:...",
+  "payload": {
+    "type": "json | binary | stream",
+    "mime": "application/json",
+    "location": "./payload.json",
+    "encoding": "utf-8 | raw | base64"
+  },
+  "authority": "none | read | write | execute",
+  "executable": false,
+  "identity": {
+    "name": "human-readable-name",
+    "version": "1.0.0",
+    "hash": "sha256:..."
+  },
+  "projections": {
+    "default": {},
+    "http": {},
+    "raw": {}
+  },
+  "invariants": [
+    "immutable_payload",
+    "no_execution",
+    "projection_only"
+  ],
+  "events": {
+    "on_load": ["log"],
+    "on_project": ["tick", "audit"]
+  }
+}
+```
+
+**Required fields**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Semantic object identifier |
+| `hash` | string | SHA-256 hash of payload |
+| `payload` | object | Payload specification |
+| `authority` | enum | Permission level |
+| `projections` | object | Available output mappings |
+
+**Optional fields**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `identity` | object | Human-readable metadata |
+| `invariants` | array | Declared constraints |
+| `events` | object | Lifecycle event bindings |
+| `executable` | boolean | Execution flag (default: false) |
+
+### 15.5 Identity Resolution
+
+**Identity tuple**
+
+```
+(id, hash)
+```
+
+- `id` is semantic (`object://domain/name`)
+- `hash` is truth (SHA-256 of payload)
+
+**Resolution rules**
+
+1. ID is semantic, not a file path.
+2. Hash always wins over version.
+3. Same object = same behavior (no environment-dependent meaning).
+
+**Resolution algorithm**
+
+```
+resolve(request) → object_id
+1. Extract path/name from request
+2. Normalize to object:// URI
+3. Lookup in object registry
+4. Return (id, hash) tuple
+```
+
+### 15.6 Loading
+
+```
+load(object_id) → (descriptor, payload)
+1. Fetch descriptor by ID
+2. Parse descriptor JSON
+3. Validate descriptor schema
+4. Fetch payload from location
+5. Verify payload hash
+6. Return (descriptor, payload)
+```
+
+**Load failures**
+
+| Failure | Response |
+|---------|----------|
+| Object not found | 404 + `object.not_found` event |
+| Invalid descriptor | 500 + `object.invalid` event |
+| Hash mismatch | 500 + `object.corrupted` event |
+| Payload unavailable | 503 + `object.unavailable` event |
+
+**Caching**
+
+Object Servers MAY cache descriptors (keyed by ID), payloads (keyed by hash), and projections (keyed by ID + projection name). Cache MUST invalidate when hash changes.
+
+### 15.7 Verification
+
+```
+verify(object) → verified | error
+1. Verify payload hash matches descriptor
+2. Verify authority level is permitted
+3. Verify all declared invariants hold
+4. Verify no forbidden patterns present
+```
+
+**Built-in invariants**
+
+| Invariant | Meaning |
+|-----------|---------|
+| `immutable_payload` | Payload cannot be modified |
+| `no_execution` | Object cannot trigger execution |
+| `projection_only` | Only projection operations allowed |
+| `no_side_effects` | No external state changes |
+| `deterministic` | Same input → same output |
+| `auditable` | All operations must be logged |
+
+Custom invariants are allowed and must be enforced.
+
+### 15.8 Projection
+
+**Definition:** projection is a view of an object, not an action.
+
+**Projection rules**
+
+Projections may map data, transform representation, add headers/metadata, select subsets, and emit events. They may not mutate payloads, execute code, access external resources, branch on environment, or make network requests.
+
+**Projection schema**
+
+```json
+{
+  "projections": {
+    "default": {
+      "type": "json",
+      "emit": {
+        "counter": "@payload.counter",
+        "timestamp": "@meta.projected_at"
+      }
+    },
+    "http": {
+      "type": "http-response",
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "immutable"
+      },
+      "body": "@payload"
+    },
+    "raw": {
+      "type": "binary",
+      "source": "@payload",
+      "encoding": "raw"
+    }
+  }
+}
+```
+
+**Projection selection**
+
+```
+select_projection(object, request) → projection
+1. Explicit projection name
+2. Accept header match
+3. Fallback to "default"
+4. Error if none
+```
+
+### 15.9 Events
+
+**Lifecycle events**
+
+| Event | When | Data |
+|-------|------|------|
+| `object.resolved` | After ID resolution | `{ id, hash }` |
+| `object.loaded` | After load complete | `{ id, hash, size }` |
+| `object.verified` | After verification | `{ id, invariants }` |
+| `object.projected` | After projection | `{ id, projection, latency }` |
+| `object.error` | On any error | `{ id, error, phase }` |
+
+Handlers must not modify object state.
+
+### 15.10 Authority Levels
+
+| Level | Meaning |
+|-------|---------|
+| `none` | Projection only |
+| `read` | Read permitted for authorized parties |
+| `write` | Modifications require escalation |
+| `execute` | Execution requires explicit capability |
+
+Default authority is `none`. The server must reject operations exceeding declared authority.
+
+### 15.11 Payload Types
+
+**JSON**
+
+```json
+{
+  "payload": {
+    "type": "json",
+    "mime": "application/json",
+    "location": "./state.json",
+    "encoding": "utf-8"
+  }
+}
+```
+
+**Binary**
+
+```json
+{
+  "payload": {
+    "type": "binary",
+    "mime": "application/octet-stream",
+    "location": "./data.bin",
+    "encoding": "raw",
+    "size": 1048576
+  }
+}
+```
+
+**Media**
+
+```json
+{
+  "payload": {
+    "type": "binary",
+    "mime": "image/svg+xml",
+    "location": "./video.svg",
+    "encoding": "raw",
+    "semantics": "svg-video-container"
+  }
+}
+```
+
+**Stream**
+
+```json
+{
+  "payload": {
+    "type": "stream",
+    "mime": "application/octet-stream",
+    "location": "stream://source/id",
+    "encoding": "chunked"
+  }
+}
+```
+
+### 15.12 Error Handling
+
+**Error categories**
+
+| Category | HTTP Status | Meaning |
+|----------|-------------|---------|
+| `resolution_error` | 404 | Object not found |
+| `load_error` | 500 | Failed to load object |
+| `verification_error` | 422 | Invariant violation |
+| `projection_error` | 500 | Projection failed |
+| `authority_error` | 403 | Insufficient authority |
+
+**Error response format**
+
+```json
+{
+  "error": {
+    "category": "verification_error",
+    "code": "invariant_violation",
+    "message": "Invariant 'immutable_payload' violated",
+    "object_id": "object://example/counter",
+    "phase": "verify"
+  }
+}
+```
+
+Errors must not expose internal server state and must emit `object.error`.
+
+### 15.13 Minimal Reference Implementation (JS)
+
+```javascript
+export async function handleRequest(req) {
+  const objectId = resolveObjectId(req);
+  emit('object.resolved', { id: objectId });
+
+  const object = await loadObject(objectId);
+  emit('object.loaded', { id: objectId, hash: object.hash });
+
+  verifyObject(object);
+  emit('object.verified', { id: objectId });
+
+  const projectionName = selectProjection(object, req);
+  const projection = object.projections[projectionName];
+
+  const response = projectObject(object, projection);
+  emit('object.projected', { id: objectId, projection: projectionName });
+
+  return response;
+}
+```
+
+```javascript
+export function resolveObjectId(req) {
+  const path = req.path || req.url;
+  if (path.startsWith('/objects/')) {
+    return `object://${path.slice(9)}`;
+  }
+  if (path.startsWith('object://')) {
+    return path;
+  }
+  throw new ResolutionError(`Cannot resolve: ${path}`);
+}
+```
+
+```javascript
+export async function loadObject(objectId) {
+  const descriptorPath = resolveDescriptorPath(objectId);
+  const descriptor = await readJSON(descriptorPath);
+  validateDescriptor(descriptor);
+  const payloadPath = resolvePayloadPath(descriptor.payload.location);
+  const payload = await readPayload(payloadPath, descriptor.payload);
+  const actualHash = computeHash(payload);
+  if (actualHash !== descriptor.hash) {
+    throw new VerificationError('Hash mismatch');
+  }
+  return { ...descriptor, payload };
+}
+```
+
+```javascript
+export function verifyObject(object) {
+  for (const invariant of object.invariants || []) {
+    if (!checkInvariant(object, invariant)) {
+      throw new VerificationError(`Invariant failed: ${invariant}`);
+    }
+  }
+}
+
+function checkInvariant(object, invariant) {
+  switch (invariant) {
+    case 'immutable_payload':
+      return true;
+    case 'no_execution':
+      return object.executable !== true;
+    case 'projection_only':
+      return object.authority === 'none';
+    default:
+      return checkCustomInvariant(object, invariant);
+  }
+}
+```
+
+```javascript
+export function projectObject(object, projection) {
+  const result = {};
+  for (const [key, value] of Object.entries(projection.emit || {})) {
+    result[key] = resolveReference(value, object);
+  }
+  return {
+    type: projection.type,
+    headers: projection.headers || {},
+    body: projection.body ? resolveReference(projection.body, object) : result
+  };
+}
+
+function resolveReference(ref, object) {
+  if (typeof ref !== 'string' || !ref.startsWith('@')) {
+    return ref;
+  }
+  const path = ref.slice(1).split('.');
+  let value = object;
+  for (const key of path) {
+    value = value?.[key];
+  }
+  return value;
+}
+```
+
+### 15.14 Compliance
+
+**Compliance levels**
+
+| Level | Requirements |
+|-------|--------------|
+| Level 1 | Load + Verify + Project |
+| Level 2 | + Events + Caching |
+| Level 3 | + Custom invariants + Streaming |
+| Full | + Authority escalation + ASX integration |
+
+**Compliance testing**
+
+1. Identity tests — resolution behavior
+2. Load tests — loading and hash verification
+3. Verify tests — built-in invariants
+4. Project tests — projection mapping
+5. Error tests — error responses
+6. Event tests — event emission
+
+Non-compliant if it contains business logic, invents routes, mutates objects, or ignores invariants.
+
+### 15.15 Security Considerations
+
+- All payloads must be hash-verified before projection.
+- Authority must be enforced at every phase.
+- Invariants must be trusted and enforced.
+- Projections must not access filesystem beyond declared payloads, network, or environment.
+- Event handlers must not modify object state.
+
+**Lock statement:** An Object Server interprets. It does not decide.
+
+---
+
 **Source:** distilled from `todo.md` to provide an actionable, high-signal blueprint for implementation and design reviews.
