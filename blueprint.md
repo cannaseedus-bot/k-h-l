@@ -4914,6 +4914,10 @@ This preserves determinism and avoids forbidden GPU operations.
 **Spec ID:** `mx2lm.live.orch.v1`  
 **Status:** Normative / Law-Grade
 
+**Live Agent Orchestration on top of MX2LM Inference**, with **zero execution leakage** and **no model-server behavior**.
+
+This is not a chatbot loop. This is **lawful coordination of inference collapses**.
+
 > **Orchestration schedules inference.  
 > Inference collapses intelligence.  
 > Neither decides behavior.**
