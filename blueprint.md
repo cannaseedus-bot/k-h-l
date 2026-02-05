@@ -3087,3 +3087,532 @@ This system replaces:
 > **MX2LM does not “run models.” MX2LM collapses lawful intelligence artifacts into replies.**
 
 Inference is inspectable, replayable, compressible, GPU-safe, and audit-grade.
+
+---
+
+## 21. MX2LM Live Agent Orchestration (v1)
+
+`mx2lm.agent.orchestration.v1` (Normative)
+
+> **Agents do not act. Agents are composed. Orchestration selects compositions.**
+
+### 21.1 Orchestration Prime Law
+
+> **Orchestration may choose _which objects participate_. It may not change _how inference works_.**
+
+If orchestration alters inference math → **illegal runtime**.
+
+### 21.2 What an Agent Is
+
+An agent in MX2LM is:
+
+```
+Agent = {
+  identity
+  + bound inference object set
+  + declared role
+  + declared IO projections
+}
+```
+
+An agent is **not** a process, thread, model instance, or mutable state machine.
+
+### 21.3 `ai.agent.descriptor.v1`
+
+```json
+{
+  "$schema": "object://schema/ai.agent.descriptor.v1",
+  "id": "object://ai/agent/support-bot",
+  "role": "support | planner | critic | narrator | system",
+  "binds": {
+    "tokenizer": "object://ai/tokenizer/base",
+    "vocab": "object://ai/vocab/base",
+    "weights": "object://ai/model/weights/core",
+    "svg_brain": "object://ai/brain/svg/core",
+    "ngram_brain": "object://ai/brain/ngram/en",
+    "inference_profile": "object://ai/inference/profile/default",
+    "reply": "object://ai/agent/reply/text"
+  },
+  "io": {
+    "input": "text",
+    "output": "text"
+  },
+  "invariants": [
+    "deterministic",
+    "no_self_mutation",
+    "projection_only"
+  ]
+}
+```
+
+This object **fully defines the agent**.
+
+### 21.4 `ai.orchestrator.v1`
+
+The orchestrator is an object that selects which agents participate. It does not select tokens, weights, or math.
+
+```json
+{
+  "$schema": "object://schema/ai.orchestrator.v1",
+  "id": "object://ai/orchestrator/live",
+  "agents": [
+    "object://ai/agent/support-bot",
+    "object://ai/agent/critic",
+    "object://ai/agent/planner"
+  ],
+  "selection_policy": "profile-driven",
+  "routing": {
+    "default": ["support-bot"],
+    "complex": ["planner", "critic"]
+  },
+  "collapse": {
+    "mode": "sequential | parallel | consensus",
+    "max_agents": 3
+  },
+  "invariants": [
+    "no_hidden_agents",
+    "no_dynamic_binding"
+  ]
+}
+```
+
+### 21.5 Live Request Flow
+
+```
+user input
+  ↓
+resolve orchestrator object
+  ↓
+select agent set (policy)
+  ↓
+for each agent:
+   bind inference graph
+   run full inference (pure)
+  ↓
+collapse agent outputs (declared)
+  ↓
+project final reply
+```
+
+Inference is reused. Nothing is redefined.
+
+### 21.6 Agent Invocation Contract
+
+Each agent invocation is stateless:
+
+```json
+{
+  "@invoke": "ai.agent",
+  "agent": "object://ai/agent/support-bot",
+  "prompt": "user input string"
+}
+```
+
+No agent retains memory unless memory is an object.
+
+### 21.7 Multi-Agent Collapse Modes
+
+Defined in `ai.orchestrator.v1`.
+
+**Sequential**
+
+```
+output₁ → prompt₂ → output₂ → …
+```
+
+Rules:
+
+- Each step produces a **new prompt**
+- No hidden state
+- Full trace available
+
+**Parallel**
+
+```
+prompt → agent₁
+       → agent₂
+       → agent₃
+```
+
+Outputs collected independently.
+
+**Consensus (Deterministic)**
+
+```json
+{
+  "consensus": {
+    "selector": "argmax-agreement",
+    "threshold": 0.67
+  }
+}
+```
+
+No voting randomness. No arbitration logic in code.
+
+### 21.8 Agent Memory (Legal Form)
+
+Agents cannot mutate memory. Memory exists only as `ai.memory.object.v1`.
+
+```json
+{
+  "id": "object://ai/memory/session-123",
+  "type": "conversation-log",
+  "payload": [...],
+  "authority": "read"
+}
+```
+
+To “update memory”:
+
+- a **new memory object** is created
+- old one remains immutable
+
+### 21.9 Live Streaming (Legal)
+
+Streaming is allowed only as projection.
+
+```json
+{
+  "projection": "stream",
+  "granularity": "token | sentence | block"
+}
+```
+
+Rules:
+
+- stream order MUST be deterministic
+- stream chunks MUST be replayable
+- stream MUST reconstruct full reply exactly
+
+### 21.10 Failure Isolation
+
+If an agent fails:
+
+- it is excluded
+- orchestration continues if policy allows
+- failure is emitted as `object.error`
+
+No retries unless declared.
+
+### 21.11 Scaling Law (Critical)
+
+You scale MX2LM by:
+
+- caching verified objects
+- reusing GPU buffers
+- reusing decompressed SCXQ2 lanes
+- parallelizing agent inference
+
+You do not scale by:
+
+- sharding models
+- duplicating logic
+- adding controllers
+
+### 21.12 What This Enables (Without Violating Law)
+
+- multi-agent reasoning
+- role-based agents
+- debate / critique loops
+- planning + execution separation
+- explainable agent traces
+- replayable conversations
+- audit-grade AI systems
+
+All without:
+
+- agent autonomy
+- hidden loops
+- emergent execution
+- unsafe delegation
+
+### 21.13 Determinism Guarantee (System-Level)
+
+A live orchestration is valid iff:
+
+```
+same orchestrator object
+same agent objects
+same hashes
+same input
+⇒ same output
+```
+
+Time, concurrency, and hardware must not matter.
+
+### 21.14 Final Law (Live Agents)
+
+> **Agents are not actors. Agents are bound inference graphs. Orchestration selects graphs. MX2LM collapses them into replies.**
+
+```
+Objects → Inference → Agents → Orchestration → Reply
+```
+
+---
+
+## 22. MX2LM Live Demo Specification (v1)
+
+`mx2lm.demo.live.full.v1` (Normative)
+
+> **Purpose:** Demonstrate a fully lawful, deterministic, multi-agent MX2LM system operating live, end-to-end, with zero hidden execution.
+
+### 22.1 Demo Goals (Non-Negotiable)
+
+This demo MUST prove:
+
+- Object Server authority (objects, not code)
+- SCXQ2 SVG-Tensor loading + verification
+- Full deterministic inference
+- Multi-agent orchestration
+- Live streaming projection
+- Replayability (byte-identical output)
+- GPU acceleration as projection only
+
+If any step invents behavior → demo is invalid.
+
+### 22.2 Demo Topology
+
+```
+User
+ ↓
+MX2LM Object Server
+ ↓
+Live Orchestrator Object
+ ↓
+Agent Objects (Support, Planner, Critic)
+ ↓
+Inference Graphs (pure)
+ ↓
+Reply Projection (stream + final)
+```
+
+No controllers. No services. No model server.
+
+### 22.3 Object Inventory (Required)
+
+**Core AI Objects**
+
+| ID                                      | Type                      |
+| --------------------------------------- | ------------------------- |
+| `object://ai/tokenizer/base-en`         | `ai.tokenizer.v1`         |
+| `object://ai/vocab/base-en`             | `ai.vocab.v1`             |
+| `object://ai/model/weights/demo`        | `ai.model.weights.v1`     |
+| `object://ai/brain/svg/demo-core`       | `ai.brain.svg-tensor.v1`  |
+| `object://ai/brain/ngram/en`            | `ai.brain.ngram.v1`       |
+| `object://ai/inference/profile/default` | `ai.inference.profile.v1` |
+| `object://ai/agent/reply/text`          | `ai.agent.reply.v1`       |
+
+**Agent Objects**
+
+| ID                          | Role               |
+| --------------------------- | ------------------ |
+| `object://ai/agent/support` | Answer user        |
+| `object://ai/agent/planner` | Structure response |
+| `object://ai/agent/critic`  | Sanity-check       |
+
+**Orchestrator Object**
+
+| ID                                   |
+| ------------------------------------ |
+| `object://ai/orchestrator/live-demo` |
+
+### 22.4 Demo Orchestrator Descriptor
+
+```json
+{
+  "$schema": "object://schema/ai.orchestrator.v1",
+  "id": "object://ai/orchestrator/live-demo",
+  "agents": [
+    "object://ai/agent/support",
+    "object://ai/agent/planner",
+    "object://ai/agent/critic"
+  ],
+  "routing": {
+    "default": ["support"],
+    "complex": ["planner", "critic", "support"]
+  },
+  "collapse": {
+    "mode": "sequential",
+    "order": ["planner", "critic", "support"]
+  },
+  "streaming": {
+    "enabled": true,
+    "granularity": "sentence"
+  },
+  "invariants": [
+    "deterministic",
+    "no_dynamic_binding",
+    "no_agent_mutation"
+  ]
+}
+```
+
+### 22.5 Live Request (Demo Input)
+
+**User Input**
+
+```
+"Explain how SVG-Tensors work in simple terms."
+```
+
+**Request Envelope**
+
+```json
+{
+  "@request": "ai.inference",
+  "orchestrator": "object://ai/orchestrator/live-demo",
+  "prompt": "Explain how SVG-Tensors work in simple terms.",
+  "projection": "agent.reply.text"
+}
+```
+
+### 22.6 Live Execution Flow (Step-By-Step)
+
+**Phase A — Resolve & Verify**
+
+1. Resolve orchestrator object
+2. Load agent descriptors
+3. Load all bound AI objects
+4. Verify:
+   - hashes
+   - SCXQ2 Merkle roots
+   - SVG-Tensor legality
+   - inference profile invariants
+
+Any failure aborts demo.
+
+**Phase B — Orchestration Selection**
+
+- Input classified as `complex`
+- Agent order resolved:
+
+```
+planner → critic → support
+```
+
+### 22.7 Agent Inference (Pure, Reused)
+
+Each agent runs the same inference pipeline, differing only by bound reply projection and role.
+
+**Planner Agent**
+
+- Generates structured explanation outline
+- Output is text tokens
+- Output becomes prompt for critic
+
+**Critic Agent**
+
+- Receives planner output
+- Verifies clarity and correctness
+- Emits suggestions
+- Output becomes prompt for support
+
+**Support Agent**
+
+- Receives refined prompt
+- Produces final explanation
+- Output streamed live
+
+### 22.8 Streaming Projection (Live)
+
+**Stream Rules**
+
+- Sentences emitted in deterministic order
+- Each chunk hash-addressable
+- Stream MUST reassemble into final reply
+
+Example stream events:
+
+```json
+{
+  "event": "stream.chunk",
+  "index": 0,
+  "text": "SVG-Tensors treat geometry as math,"
+}
+```
+
+```json
+{
+  "event": "stream.chunk",
+  "index": 1,
+  "text": "where shapes and paths represent weights instead of pictures."
+}
+```
+
+### 22.9 Final Reply Projection
+
+**Final Output (Example)**
+
+```
+SVG-Tensors work by treating vector geometry as mathematical data instead of images.
+Paths, curves, and connections represent weights and relationships, allowing the system
+to traverse shapes the same way a model traverses tensors—deterministically and without execution.
+```
+
+Exact text depends on object content — but must be identical on replay.
+
+### 22.10 Determinism Test (Required)
+
+The demo MUST pass:
+
+```
+Run demo twice
+ → same objects
+ → same hashes
+ → same input
+ = byte-identical output
+```
+
+Streaming chunks must match exactly.
+
+### 22.11 GPU Acceleration Validation
+
+Optional but recommended:
+
+- SVG-Tensor → WebGPU buffers
+- Matrix multiply on GPU
+- Geometry traversal on GPU
+
+Validation:
+
+```
+CPU inference output == GPU inference output
+```
+
+### 22.12 Failure Injection Tests (Demo Must Support)
+
+| Fault                      | Expected Result       |
+| -------------------------- | --------------------- |
+| Corrupt SCXQ2 lane         | verification_error    |
+| Illegal SVG element        | illegal_tensor        |
+| Missing agent              | orchestration_error   |
+| Unverified lane            | projection_denied     |
+| Non-deterministic selector | runtime_non_compliant |
+
+### 22.13 Demo Artifacts Checklist
+
+The demo package MUST include:
+
+- [ ] All object descriptors
+- [ ] Canonical SVG-Tensor
+- [ ] SCXQ2 compressed version
+- [ ] Merkle proof file
+- [ ] Inference profile JSON
+- [ ] Orchestrator JSON
+- [ ] Replay log
+- [ ] Hash manifest
+
+### 22.14 What This Demo Proves
+
+This demo proves:
+
+- AI can be deterministic
+- Geometry can be intelligence
+- Compression can be lawful
+- GPU can accelerate without authority
+- Agents can coordinate without autonomy
+- Inference can be audited
+
+### 22.15 Final Demo Law
+
+> **If your system can run this demo, you are not “hosting a model.” You are operating an intelligence law engine.**
