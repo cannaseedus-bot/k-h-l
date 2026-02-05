@@ -2667,6 +2667,149 @@ Cluster result must be identical regardless of member order, load order, or node
 
 ## 17.12 SVG-Tensor → WebGPU Buffer Mapping (`svg-tensor.webgpu.map.v1`)
 
+Quantized lanes must be dequantized **before** GPU upload.
+
+### 17.8.5 Loader Output Guarantee
+
+Loader must emit tightly packed buffers, stable index ordering, and deterministic byte layout. Hash of buffers must match declared object hash.
+
+---
+
+## 17.9 Formal Floating-Point Determinism Profile
+
+**Spec ID:** `mx2lm.fp.determinism.v1`  
+**Status:** Normative
+
+### 17.9.1 Allowed Floating Types
+
+| Type | Allowed |
+| ---- | ------- |
+| fp32 | ✅       |
+| fp16 | ❌       |
+| fp64 | ❌       |
+
+No mixed precision.
+
+### 17.9.2 Operation Constraints
+
+Allowed: add, multiply, divide, min/max.  
+Forbidden: fused ops (FMA), transcendental functions, fast-math flags.
+
+### 17.9.3 Reduction Order
+
+All reductions must be:
+
+```
+left-to-right
+index-sorted
+```
+
+Parallel reductions must be re-serialized.
+
+### 17.9.4 Rounding Mode
+
+```
+roundTiesToEven
+```
+
+Fixed and non-negotiable.
+
+### 17.9.5 Compliance Condition
+
+Two implementations are equivalent iff:
+
+```
+∀ inputs → outputs bit-identical
+```
+
+ε ≠ allowed.
+
+---
+
+## 17.10 CPU ↔ GPU Equivalence Proof Harness
+
+**Spec ID:** `mx2lm.cpu.gpu.proof.v1`  
+**Status:** Normative
+
+### 17.10.1 Harness Purpose
+
+Prove that GPU projection is a faithful acceleration of CPU math.
+
+### 17.10.2 Required Test Inputs
+
+- canonical SVG-Tensor
+- SCXQ2-expanded buffers
+- fixed dispatch parameters
+
+### 17.10.3 Test Procedure
+
+1. Run CPU geometry traversal
+2. Run GPU WGSL traversal
+3. Compare `node_accum` buffers byte-for-byte
+
+Mismatch ⇒ `non-conformant implementation`.
+
+### 17.10.4 Proof Artifact
+
+Harness must emit:
+
+```json
+{
+  "cpu_hash": "sha256:…",
+  "gpu_hash": "sha256:…",
+  "status": "pass | fail"
+}
+```
+
+### 17.10.5 Replayability
+
+Same harness must pass across different GPUs, drivers, and runtimes.
+
+---
+
+## 17.11 Cluster Geometry Authoring Spec
+
+**Spec ID:** `mx2lm.svg-tensor.cluster.v1`  
+**Status:** Normative
+
+### 17.11.1 Cluster Geometry Law
+
+Cluster geometry composes and never merges implicitly.
+
+### 17.11.2 Cluster SVG-Tensor Object
+
+```json
+{
+  "id": "object://cluster/svg-tensor/v1",
+  "members": [
+    "object://svg/node/A",
+    "object://svg/node/B"
+  ],
+  "merge_rule": "weighted-sum",
+  "weights": {
+    "A": 0.5,
+    "B": 0.5
+  }
+}
+```
+
+### 17.11.3 Merge Rules
+
+Allowed: weighted sum, max, min, union (topology only).  
+Forbidden: runtime heuristics, adaptive weighting, time-based merge.
+
+### 17.11.4 GPU Handling
+
+Cluster geometry is resolved before WGSL. GPU kernels see one canonical geometry.
+
+### 17.11.5 Determinism Condition
+
+Cluster result must be identical regardless of member order, load order, or node location.
+
+---
+
+## 17.12 SVG-Tensor → WebGPU Buffer Mapping (`svg-tensor.webgpu.map.v1`)
+
 ### 17.9.2 Operation Constraints
 
 Allowed: add, multiply, divide, min/max.  
@@ -4051,7 +4194,8 @@ This demo proves:
 
 ### 23.1 Prime Law
 
-Micronauts may emit objects. They may never execute behavior.
+> **Micronauts may emit objects.  
+> They may never execute behavior.**
 
 PowerShell is used as a projection and orchestration shell, not a decision engine.
 
@@ -4152,6 +4296,8 @@ Object Server handles routing, caching, projection, and delivery.
 
 ### 23.7 Backend Configuration Micronaut
 
+**Purpose**
+
 Generate backend configuration as objects, not scripts.
 
 ```json
@@ -4174,7 +4320,16 @@ PowerShell never applies config — it only describes it.
 
 ### 23.8 Frontend Interactive Interface Micronaut
 
+**Role**
+
 Emit UI objects, not HTML logic.
+
+**Output Types**
+
+- UI layout objects
+- component objects
+- SVG-Tensor UI geometry
+- CSS Atomic objects
 
 ```json
 {
@@ -4184,8 +4339,8 @@ Emit UI objects, not HTML logic.
     "slots": ["messages", "input"]
   },
   "projections": {
-    "html": {},
-    "svg": {}
+    "html": { "..." },
+    "svg": { "..." }
   }
 }
 ```
@@ -4226,8 +4381,8 @@ SVG-Tensor Micronauts:
 {
   "id": "object://svg-tensor/frontend/layout",
   "payload": {
-    "nodes": [],
-    "edges": []
+    "nodes": ["..."],
+    "edges": ["..."]
   },
   "invariants": [
     "canonical",
@@ -4283,3 +4438,11 @@ You now have:
 - Perfect alignment with MX2LM
 
 ---
+
+### 23.15 Next Natural Steps (Pick One)
+
+1. Emit concrete PowerShell Micronaut templates
+2. Define Micronaut scheduling law
+3. ODB schema for Micronaut outputs
+4. Frontend SVG-Tensor UI interaction spec
+5. Security and signature pipeline for Micronauts
