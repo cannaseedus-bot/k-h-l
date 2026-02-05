@@ -5488,18 +5488,23 @@ You now have:
 
 ### 26.17 Next Freezes (Optional)
 
+Frozen now:
+
 1. Agent tool surfaces as objects (non-executing)
-2. Symbolic memory as append-only objects
-3. Conversation timeline canonicalization
-4. Agent federation across clusters
-5. Formal no-prompt-mutation proof
+2. Agent federation across clusters
+
+Remaining:
+
+1. Symbolic memory as append-only objects
+2. Conversation timeline canonicalization
+3. Formal no-prompt-mutation proof
 
 ---
 
 ## 26.18 AGENT-TOOLS-1 — Agent Tool Surfaces as Objects (Non-Executing)
 
 **Spec ID:** `mx2lm.agent.tools.v1`  
-**Status:** Normative / Law-Grade
+**Status:** FROZEN / Law-Grade
 
 ### 26.18.1 Tool Prime Law
 
@@ -5627,7 +5632,7 @@ Any of these = non-compliant runtime.
 ## 26.19 AGENT-FED-1 — Agent Federation Across Clusters
 
 **Spec ID:** `mx2lm.agent.federation.v1`  
-**Status:** Normative / Law-Grade
+**Status:** FROZEN / Law-Grade
 
 ### 26.19.1 Federation Prime Law
 
