@@ -2819,3 +2819,271 @@ if (object.type === "ai.brain.svg-tensor") {
 ---
 
 **Source:** distilled from `todo.md` to provide an actionable, high-signal blueprint for implementation and design reviews.
+
+## 20. MX2LM Full Inference Specification (Normative)
+
+**Spec:** `mx2lm.inference.full.v1`
+
+> **Inference is not execution. Inference is projection across lawful objects.**
+
+### 20.1 Inference Prime Law
+
+> **Inference MAY read tensors. Inference MAY traverse geometry. Inference MAY multiply matrices. Inference MAY NOT decide behavior.**
+
+All behavior is declared in objects.
+
+### 20.2 Inference Object Graph (Required)
+
+A valid inference references **exactly** these object classes:
+
+```
+ai.tokenizer.v1
+ai.vocab.v1
+ai.model.weights.v1
+ai.brain.svg-tensor.v1
+ai.brain.ngram.v1        (optional but recommended)
+ai.inference.profile.v1
+ai.agent.reply.v1
+```
+
+If any required object is missing ⇒ `inference_error.missing_object`.
+
+### 20.3 Inference Request Envelope
+
+```json
+{
+  "@request": "ai.inference",
+  "prompt": "user input string",
+  "profile": "object://ai/inference/profile/default",
+  "projection": "agent.reply"
+}
+```
+
+No parameters. No temperature. No randomness unless encoded in objects.
+
+### 20.4 Phase I — Token Projection
+
+Tokenization is projection only:
+
+```
+prompt
+ → tokenizer.rules
+ → vocab.map
+ = token_stream[]
+```
+
+Rules:
+
+- tokenizer must be total
+- tokenizer must not inspect context
+- tokenizer must not branch
+
+Output:
+
+```
+T = [t₀, t₁, t₂, …]
+```
+
+### 20.5 Phase II — Symbol & Vector Binding
+
+Each token binds to:
+
+- vocab symbol
+- embedding row
+- n-gram state (if present)
+
+```
+token tᵢ
+ → vocab[tᵢ]
+ → embedding[tᵢ]
+ → ngram_state[tᵢ]
+```
+
+Initial inference state vector:
+
+```
+S₀ = {
+  tokens,
+  symbols,
+  embedding_vectors,
+  ngram_context
+}
+```
+
+### 20.6 Phase III — Matrix Projection (Neural Path)
+
+**Weight access rules**
+
+- weights are read-only
+- shapes must match declared `shape_hash`
+- no gradients
+- no mutation
+
+**Matrix multiply (deterministic)**
+
+For each layer ℓ:
+
+```
+Sᵢ₊₁ = activation(
+          Wℓ × Sᵢ + Bℓ
+        )
+```
+
+Activation functions must be declared, pure, and deterministic. No dropout, sampling, or noise.
+
+### 20.7 Phase IV — SVG-Tensor Traversal (Geometric Path)
+
+Runs in parallel with matrix projection.
+
+**SVG-Tensor read**
+
+- canonical SVG or SCXQ2-decompressed lanes
+- geometry = tensor
+- topology = connectivity
+
+**Traversal law**
+
+```
+current_node
+ → outgoing_edges
+ → weighted accumulation
+ → next_node_set
+```
+
+Weights derive from path length, curvature, stroke-width, and transform scale.
+
+Geometric state vector:
+
+```
+Gₙ = { node_weights[], edge_weights[] }
+```
+
+### 20.8 Phase V — Hybrid Collapse (Matrix ⊗ Geometry ⊗ N-gram)
+
+Inference profile defines domain combination.
+
+Example:
+
+```json
+{
+  "collapse": "weighted-sum",
+  "inputs": ["matrix", "svg", "ngram"],
+  "weights": {
+    "matrix": 0.6,
+    "svg": 0.3,
+    "ngram": 0.1
+  }
+}
+```
+
+Collapse computes:
+
+```
+C = α·Sₙ + β·Gₙ + γ·Nₙ
+```
+
+Coefficients are data, not code.
+
+### 20.9 Phase VI — Logit Projection
+
+Collapsed state `C` projects to output space:
+
+```
+logits = vocab_projection(C)
+```
+
+Rules:
+
+- no temperature
+- no softmax sampling unless declared
+- no stochastic choice
+
+If sampling is desired, it must be encoded as a symbolic object, not runtime logic.
+
+### 20.10 Phase VII — Deterministic Selection
+
+Selection rule is declared.
+
+Example:
+
+```json
+{
+  "selection": "argmax",
+  "top_k": 1
+}
+```
+
+Legal selectors:
+
+- `argmax`
+- `threshold`
+- `ranked-list`
+
+Illegal: random choice, time-based, environment-based.
+
+### 20.11 Phase VIII — Reply Projection
+
+Selected tokens are projected via:
+
+```
+ai.agent.reply.v1
+```
+
+Options: detokenize to text, structured JSON, or token stream. Reply object defines formatting only.
+
+### 20.12 Phase IX — Trace Emission (Optional)
+
+Events may be emitted:
+
+```
+object.inference.started
+object.inference.layer
+object.inference.collapsed
+object.inference.completed
+```
+
+Traces must be read-only and must not affect inference.
+
+### 20.13 GPU Acceleration (Legal Use)
+
+GPU may accelerate matrix multiply, SVG traversal, and collapse math.
+
+GPU must not:
+
+- mutate buffers
+- introduce nondeterminism
+- reorder indices
+- write back state
+
+GPU is a projection accelerator only.
+
+### 20.14 Determinism Proof Obligation
+
+An MX2LM inference is valid iff:
+
+```
+same objects
+same hashes
+same request
+same projection
+⇒ same reply (byte-for-byte)
+```
+
+If this does not hold ⇒ non-compliant inference.
+
+### 20.15 What This Replaces (Explicit)
+
+This system replaces:
+
+- temperature
+- top-p hacks
+- prompt “engineering”
+- black-box decoding
+- model servers
+- hidden heuristics
+
+### 20.16 Final Law (Inference)
+
+> **MX2LM does not “run models.” MX2LM collapses lawful intelligence artifacts into replies.**
+
+Inference is inspectable, replayable, compressible, GPU-safe, and audit-grade.
