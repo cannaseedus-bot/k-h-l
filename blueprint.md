@@ -5170,6 +5170,409 @@ You now have:
 
 ---
 
+## 26.18 AGENT-TOOLS-1 — Agent Tool Surfaces as Objects (Non-Executing)
+
+**Spec ID:** `mx2lm.agent.tools.v1`  
+**Status:** Normative / Law-Grade
+
+### 26.18.1 Tool Prime Law
+
+> **A tool MAY describe capability.  
+> A tool MAY expose structure.  
+> A tool MAY NOT execute, mutate, or decide.**
+
+Tools exist to inform inference, not to perform work.
+
+### 26.18.2 Tool Definition (Canonical)
+
+```
+tool = {
+  identity,
+  surface_schema,
+  input_shape,
+  output_shape,
+  constraints,
+  projections
+}
+```
+
+There is no function body, no handler, no runtime hook.
+
+### 26.18.3 Canonical Tool Object Schema
+
+```json
+{
+  "$schema": "object://schema/agent.tool.v1",
+  "id": "object://agent/tool/search.docs",
+  "type": "agent.tool",
+  "description": "Search indexed documentation corpus",
+  "inputs": {
+    "query": "string",
+    "limit": "integer"
+  },
+  "outputs": {
+    "results": "array<doc_ref>"
+  },
+  "constraints": [
+    "read_only",
+    "no_side_effects",
+    "non_executing"
+  ],
+  "projections": {
+    "symbolic": {
+      "type": "tool-symbol",
+      "emit": {
+        "name": "@id",
+        "inputs": "@inputs",
+        "outputs": "@outputs"
+      }
+    }
+  }
+}
+```
+
+This object never runs. It only shapes inference space.
+
+### 26.18.4 Inference Participation (Symbolic)
+
+Tools influence inference only as symbols:
+
+```
+prompt
+ → tokens
+ → symbols
+ → tool affordance symbols
+ → logits
+```
+
+The model may reference a tool — it may never invoke it.
+
+### 26.18.5 Tool Availability Binding (Agent-Scoped)
+
+```json
+{
+  "$schema": "object://schema/agent.tools.bindings.v1",
+  "agent": "agent://coder.bot.v1",
+  "tools": [
+    "object://agent/tool/search.docs",
+    "object://agent/tool/read.file"
+  ],
+  "invariants": [
+    "tool_visibility_only",
+    "no_execution"
+  ]
+}
+```
+
+If a tool is not bound, it does not exist to the agent.
+
+### 26.18.6 Tool Output Is Never Real Data
+
+Tool “results” are placeholders, references, and symbolic hints only.
+
+Example emitted reply:
+
+```
+"I would use tool:search.docs(query='SCXQ2')"
+```
+
+The client or operator decides what happens next — outside MX2LM.
+
+### 26.18.7 Forbidden Patterns (Hard Ban)
+
+Illegal in AGENT-TOOLS-1:
+
+- tool → function mapping
+- tool → HTTP call
+- tool → shell execution
+- tool → filesystem mutation
+- tool → callback hooks
+
+Any of these = non-compliant runtime.
+
+### 26.18.8 Final Lock
+
+> **Tools describe.  
+> Inference decides.  
+> Execution never enters.**
+
+---
+
+## 26.19 AGENT-FED-1 — Agent Federation Across Clusters
+
+**Spec ID:** `mx2lm.agent.federation.v1`  
+**Status:** Normative / Law-Grade
+
+### 26.19.1 Federation Prime Law
+
+> **Federation MAY share objects.  
+> Federation MAY route requests.  
+> Federation MAY NOT merge execution authority.**
+
+Clusters cooperate by object exchange, not behavior.
+
+### 26.19.2 Federated Agent Identity
+
+An agent is cluster-portable because it is just an object graph:
+
+```json
+{
+  "$schema": "object://schema/agent.federated.v1",
+  "agent_id": "agent://coder.bot.v1",
+  "origin_cluster": "cluster://us-west/alpha",
+  "brains": [
+    "object://ai/model/phi2/quantized/int8"
+  ],
+  "profiles": [
+    "object://ai/inference/profile/code"
+  ],
+  "hash": "sha256:…",
+  "signature": "πsig:v1:ed25519:cluster.root:…"
+}
+```
+
+No cluster-local assumptions.
+
+### 26.19.3 Federation Transport (Opaque)
+
+Federation transports:
+
+- agent identity objects
+- tool surface objects
+- inference requests
+- inference replies
+- audit logs
+
+Transport MAY be:
+
+- WebDAV
+- DNS-API
+- Object Server sync
+- Drive-sealed ODB
+- WebSocket streams
+
+Transport never interprets.
+
+### 26.19.4 Remote Inference Routing
+
+A cluster MAY forward an inference request:
+
+```
+local orchestrator
+ → federated route
+ → remote MX2LM
+ → reply object
+ → local projection
+```
+
+The request object must remain byte-identical.
+
+### 26.19.5 Cross-Cluster Trust Law
+
+A federated agent is trusted iff:
+
+```
+agent.hash matches
+agent.signature verifies
+brain hashes exist locally OR retrievable
+```
+
+No trust by hostname. No trust by IP. Only hash + signature.
+
+### 26.19.6 Federation Without State Leakage
+
+Agents across clusters:
+
+- share brains (sealed)
+- share profiles
+- share tools (symbolic)
+
+They do not share:
+
+- session state
+- memory
+- mutable objects
+- execution context
+
+### 26.19.7 Cluster Arbitration (Optional)
+
+If multiple clusters reply:
+
+```json
+{
+  "$schema": "object://schema/agent.federation.arbitration.v1",
+  "strategy": "first_valid",
+  "timeout_ms": 500
+}
+```
+
+Arbitration is declared, not emergent.
+
+### 26.19.8 Determinism Guarantee (Federated)
+
+Federation is compliant iff:
+
+```
+same request object
+same agent object
+same brains
+⇒ same reply
+```
+
+Regardless of which cluster served it.
+
+### 26.19.9 Final Lock
+
+> **Tools describe.  
+> Agents reference.  
+> Clusters exchange objects.  
+> Inference collapses truth.**
+
+---
+
+## 26.20 HYBRID-WORMHOLE-1 — Tiered Control Plane
+
+**Spec ID:** `mx2lm.wormhole.hybrid.v1`  
+**Status:** Normative / Law-Grade
+
+### 26.20.1 Prime Law
+
+> **Wormholes MAY discover.  
+> Wormholes MAY sync.  
+> Wormholes MAY stream.  
+> Wormholes MAY prove.  
+> Wormholes MAY NOT execute.**
+
+The tiered control plane transports objects and proofs only.
+
+### 26.20.2 Four-Layer Wormhole Stack (Canonical)
+
+```asxr
+@wormhole-stack hybrid {
+  @layer 1: "discovery" protocol=dns {
+    purpose: "capability-negotiation + service-discovery",
+    security: "DNSSEC + DANE"
+  }
+  @layer 2: "sync" protocol=http+webdav {
+    purpose: "state-synchronization + bulk-transfer",
+    security: "TLS + OAuth2"
+  }
+  @layer 3: "runtime" protocol=websocket+binary {
+    purpose: "live-state-streaming + RPC",
+    security: "wss + per-message-auth"
+  }
+  @layer 4: "proof" protocol=scxq2 {
+    purpose: "compression + integrity + proof",
+    security: "cryptographic-proofs"
+  }
+}
+```
+
+### 26.20.3 Layer 1: DNS Discovery Wormhole
+
+Discovery is capability negotiation, not execution:
+
+```asxr
+@wormhole discovery:dns {
+  protocol: "dns-sd",
+  @security "dnssec" { verify: "RRSIG validation" },
+  @advertise {
+    txt-record: {
+      protocols: "ws,wss,scxq2",
+      compression: "brotli,scxq2,lz4",
+      auth: "jwt,oauth2,mTLS",
+      features: "atomic-blocks,wormholes,crdt"
+    }
+  }
+}
+```
+
+### 26.20.4 Layer 2: HTTP Sync Wormhole
+
+State sync is object transport with deltas and proofs:
+
+```asxr
+@wormhole sync:http {
+  protocol: "http+delta",
+  @methods {
+    GET: "fetch-state (full/delta)",
+    PUT: "update-state",
+    PATCH: "apply-delta",
+    PROPFIND: "discover-state-structure",
+    REPORT: "query-state-changes"
+  },
+  @compression { response: "Content-Encoding: scxq2" }
+}
+```
+
+### 26.20.5 Layer 3: WebSocket Runtime Wormhole
+
+Runtime is live object streaming, not execution:
+
+```asxr
+@wormhole runtime:websocket {
+  protocol: "ws+binary",
+  @frame-format {
+    header: { version: "1", type: "data|control|heartbeat|error" },
+    payload: "binary",
+    trailer: { checksum: "crc32", signature: "hmac" }
+  }
+}
+```
+
+### 26.20.6 Layer 4: SCXQ2 Proof Wormhole
+
+Proof is compression + integrity, never authority:
+
+```asxr
+@wormhole proof:scxq2 {
+  protocol: "scxq2",
+  @compression { algorithm: "context-aware-lz" },
+  @proof-system { type: "zk-STARK" },
+  @quantum-resistance { signatures: "SPHINCS+" }
+}
+```
+
+### 26.20.7 Hybrid Orchestration (Deterministic)
+
+Protocol selection is declared and deterministic:
+
+```asxr
+@wormhole-orchestrator {
+  @protocol-selection {
+    if data-size == small && latency == realtime -> use: websocket
+    if data-size == large && latency == background -> use: http + scxq2
+    if initial-connection -> use: dns-discovery -> negotiate
+  }
+  @fallback-strategy {
+    primary: websocket + scxq2,
+    secondary: http + scxq2,
+    tertiary: http + brotli
+  }
+}
+```
+
+### 26.20.8 Security Chain (Defense-in-Depth)
+
+```
+dnssec → tls-cert → oauth-token → message-auth → scxq2-proof
+```
+
+Each layer adds verification without execution authority.
+
+### 26.20.9 Performance Invariants
+
+- discovery: cached, capability-only
+- sync: bulk transfer with delta compression
+- runtime: low-latency streaming
+- proof: verifiable integrity with minimized payloads
+
+### 26.20.10 Final Lock
+
+> **Discover, sync, stream, prove — never execute.**
+
+---
+
 ## 27. π-Profile Authoring Format v1.0 (Authoritative)
 
 **Spec ID:** `mx2lm.pi-profile.authoring.v1`  
@@ -5404,6 +5807,100 @@ Every adapter must emit only:
 
 Adapters must be deterministic and must not execute behavior. They must produce immutable objects.
 
+### 28.2.1 Adapter Signal Shape (Invariant)
+
+Every adapter must emit the same canonical shape, regardless of model source:
+
+```json
+{
+  "@type": "pi.signal.v1",
+  "geometry": {
+    "angles": [],
+    "magnitudes": [],
+    "paths": [],
+    "epsilon": 0.1745329
+  },
+  "provenance": {
+    "adapter": "string",
+    "deterministic": true
+  }
+}
+```
+
+No logits, embeddings, or tensors are exposed upstream. Only geometry is legal.
+
+### 28.2.2 π-Adapter Interface v1 (Locked)
+
+This is the only adapter contract allowed. If a system cannot emit this, it does not participate.
+
+```json
+{
+  "@type": "pi.signal.v1",
+  "@version": "1.0",
+  "geometry": {
+    "angles": [0.0, 1.0472, 2.0944],
+    "magnitudes": [0.92, 0.51, 0.13],
+    "paths": [
+      [0, 1],
+      [1, 2]
+    ],
+    "epsilon": 0.1745329
+  },
+  "provenance": {
+    "adapter": "gguf",
+    "adapter_version": "1.0.0",
+    "deterministic": true,
+    "source_hash": "sha256:…"
+  }
+}
+```
+
+**Hard rules**
+
+- angles MUST be radians ∈ [0, 2π)
+- magnitudes MUST be ≥ 0 (no upper bound)
+- angles.length === magnitudes.length
+- no logits, token IDs, embeddings, or text
+
+This is signal, not representation.
+
+### 28.2.3 Semantic Meaning (Frozen)
+
+| Field     | Meaning                          |
+| --------- | -------------------------------- |
+| angle     | phase / semantic orientation     |
+| magnitude | confidence / energy              |
+| path      | topological adjacency (optional) |
+| epsilon   | angular tolerance (π-native)     |
+
+### 28.2.4 Adapter Responsibility (Strict)
+
+An adapter may:
+
+- normalize
+- project
+- compress
+- quantize
+- batch
+
+An adapter may not:
+
+- rank
+- retrieve
+- cache
+- interpret semantics
+
+Adapters emit geometry only.
+
+### 28.2.5 Determinism Law
+
+```
+Same input + same adapter + same version
+→ identical pi.signal.v1
+```
+
+If this is violated, the adapter is non-conformant.
+
 ### 28.3 Stack Placement (Authoritative)
 
 ```
@@ -5422,7 +5919,18 @@ Adapters must be deterministic and must not execute behavior. They must produce 
 
 π-GCCP never inspects model identity. It only consumes geometry.
 
-### 28.4 Adapter Examples (Non-Exhaustive)
+### 28.4 Plug-in Matrix (No Branches)
+
+All sources satisfy the same adapter contract without runtime branching:
+
+| Source | What it emits       | Adapter job            | Result     |
+| ------ | ------------------- | ---------------------- | ---------- |
+| GGUF   | logits / embeddings | project → angles       | SVG-Tensor |
+| ONNX   | numeric tensors     | normalize → phase      | SVG-Tensor |
+| WebGPU | GPU buffers         | reinterpret → geometry | SVG-Tensor |
+| WASM   | arbitrary math      | emit → angles          | SVG-Tensor |
+
+### 28.5 Adapter Examples (Non-Exhaustive)
 
 **LLM logits adapter**
 
@@ -5450,7 +5958,158 @@ Adapters must be deterministic and must not execute behavior. They must produce 
 
 All adapters converge to the same geometric primitives.
 
-### 28.5 Standardization Targets (Required)
+### 28.6 WGSL Reference Kernels (Angle + Interference)
+
+These kernels implement π-GCCP math only. They do not know about models.
+
+**Angle distance kernel**
+
+```wgsl
+// pi_angle_distance.wgsl
+// Computes wrapped angular distance in radians
+
+@group(0) @binding(0)
+var<storage, read> anglesA : array<f32>;
+
+@group(0) @binding(1)
+var<storage, read> anglesB : array<f32>;
+
+@group(0) @binding(2)
+var<storage, write> distances : array<f32>;
+
+const PI : f32 = 3.141592653589793;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) id : vec3<u32>) {
+    let i = id.x;
+    if (i >= arrayLength(&anglesA)) {
+        return;
+    }
+
+    let delta = abs(anglesA[i] - anglesB[i]);
+    let wrapped = min(delta, 2.0 * PI - delta);
+
+    distances[i] = wrapped;
+}
+```
+
+**Interference kernel**
+
+```wgsl
+// pi_interference.wgsl
+// Computes cosine interference weighted by magnitude
+
+@group(0) @binding(0)
+var<storage, read> anglesA : array<f32>;
+
+@group(0) @binding(1)
+var<storage, read> anglesB : array<f32>;
+
+@group(0) @binding(2)
+var<storage, read> magnitudesA : array<f32>;
+
+@group(0) @binding(3)
+var<storage, read> magnitudesB : array<f32>;
+
+@group(0) @binding(4)
+var<storage, write> output : array<f32>;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) id : vec3<u32>) {
+    let i = id.x;
+    if (i >= arrayLength(&anglesA)) {
+        return;
+    }
+
+    let phase = anglesA[i] - anglesB[i];
+    let interference = cos(phase);
+
+    output[i] = interference * magnitudesA[i] * magnitudesB[i];
+}
+```
+
+**Collapse rule (host-side, exact)**
+
+```
+score = Σ interference_i
+normalized_score = score / Σ (magA_i * magB_i)
+```
+
+CPU fallback must use identical math.
+
+### 28.7 End-to-End Trace (GGUF → π → Retrieval)
+
+**GGUF emits raw numbers (conceptual)**
+
+```
+embedding = [0.12, -0.98, 0.05, 0.31]
+entropy = 0.42
+```
+
+**Adapter projection rule (example, deterministic)**
+
+```
+angle_i = atan2(value_i, norm)
+magnitude_i = 1 - entropy
+```
+
+**Result**
+
+```json
+{
+  "@type": "pi.signal.v1",
+  "@version": "1.0",
+  "geometry": {
+    "angles": [1.448, -1.45, 0.12, 0.77],
+    "magnitudes": [0.58, 0.58, 0.58, 0.58],
+    "epsilon": 0.1745329
+  },
+  "provenance": {
+    "adapter": "gguf",
+    "deterministic": true
+  }
+}
+```
+
+**SVG-Tensor index (stored)**
+
+```json
+{
+  "doc_id": "doc_42",
+  "angles": [...],
+  "magnitudes": [...]
+}
+```
+
+Stored in SCXQ2 lanes, memory-mapped, hash-addressed.
+
+**π-GCCP collapse (WebGPU or CPU)**
+
+```
+distance(doc, query)
+→ interference score
+→ normalized collapse value
+```
+
+**object://retrieve/semantic.v1 (final)**
+
+```json
+{
+  "@type": "object.retrieve.semantic.v1",
+  "query_hash": "pi:…",
+  "profile": "topological_v1",
+  "results": [
+    { "id": "doc_42", "score": 0.913 },
+    { "id": "doc_17", "score": 0.802 },
+    { "id": "doc_09", "score": 0.411 }
+  ],
+  "deterministic": true
+}
+```
+
+Retrieval never knows model identity. Only geometry matters.
+
+### 28.8 Standardization Targets (Required)
 
 Standardize:
 
@@ -5461,7 +6120,7 @@ Standardize:
 
 Do not standardize model families.
 
-### 28.6 Final Collapse
+### 28.9 Final Collapse
 
 Any model that can emit a signal can participate. Adapters emit geometry. π handles the rest.
 
