@@ -2667,95 +2667,264 @@ Cluster result must be identical regardless of member order, load order, or node
 
 ## 17.12 SVG-Tensor → WebGPU Buffer Mapping (`svg-tensor.webgpu.map.v1`)
 
-SVG is the source of truth. GPU buffers are projections.
+Quantized lanes must be dequantized **before** GPU upload.
 
-**Buffer classes**
+### 17.8.5 Loader Output Guarantee
 
-| Buffer         | Purpose              |
-| -------------- | -------------------- |
-| `nodeBuffer`   | Nodes / vertices     |
-| `edgeBuffer`   | Connectivity         |
-| `weightBuffer` | Weights / magnitudes |
-| `metaBuffer`   | Shape + offsets      |
+Loader must emit tightly packed buffers, stable index ordering, and deterministic byte layout. Hash of buffers must match declared object hash.
 
-**Node buffer (`Float32Array`)**
+---
+
+## 17.9 Formal Floating-Point Determinism Profile
+
+**Spec ID:** `mx2lm.fp.determinism.v1`  
+**Status:** Normative
+
+### 17.9.1 Allowed Floating Types
+
+| Type | Allowed |
+| ---- | ------- |
+| fp32 | ✅       |
+| fp16 | ❌       |
+| fp64 | ❌       |
+
+No mixed precision.
+
+### 17.9.2 Operation Constraints
+
+Allowed: add, multiply, divide, min/max.  
+Forbidden: fused ops (FMA), transcendental functions, fast-math flags.
+
+### 17.9.3 Reduction Order
+
+All reductions must be:
 
 ```
-struct Node {
-  float x;
-  float y;
-  float z;    // 0.0 for 2D
-  float rank; // depth in group tree
+left-to-right
+index-sorted
+```
+
+Parallel reductions must be re-serialized.
+
+### 17.9.4 Rounding Mode
+
+```
+roundTiesToEven
+```
+
+Fixed and non-negotiable.
+
+### 17.9.5 Compliance Condition
+
+Two implementations are equivalent iff:
+
+```
+∀ inputs → outputs bit-identical
+```
+
+ε ≠ allowed.
+
+---
+
+## 17.10 CPU ↔ GPU Equivalence Proof Harness
+
+**Spec ID:** `mx2lm.cpu.gpu.proof.v1`  
+**Status:** Normative
+
+### 17.10.1 Harness Purpose
+
+Prove that GPU projection is a faithful acceleration of CPU math.
+
+### 17.10.2 Required Test Inputs
+
+- canonical SVG-Tensor
+- SCXQ2-expanded buffers
+- fixed dispatch parameters
+
+### 17.10.3 Test Procedure
+
+1. Run CPU geometry traversal
+2. Run GPU WGSL traversal
+3. Compare `node_accum` buffers byte-for-byte
+
+Mismatch ⇒ `non-conformant implementation`.
+
+### 17.10.4 Proof Artifact
+
+Harness must emit:
+
+```json
+{
+  "cpu_hash": "sha256:…",
+  "gpu_hash": "sha256:…",
+  "status": "pass | fail"
 }
 ```
 
-Mapping rules: each primitive emits ≥1 node; path commands emit nodes per segment; group depth increments `rank`.
+### 17.10.5 Replayability
 
-**Edge buffer (`Uint32Array`)**
+Same harness must pass across different GPUs, drivers, and runtimes.
 
-```
-struct Edge {
-  uint from;
-  uint to;
+---
+
+## 17.11 Cluster Geometry Authoring Spec
+
+**Spec ID:** `mx2lm.svg-tensor.cluster.v1`  
+**Status:** Normative
+
+### 17.11.1 Cluster Geometry Law
+
+Cluster geometry composes and never merges implicitly.
+
+### 17.11.2 Cluster SVG-Tensor Object
+
+```json
+{
+  "id": "object://cluster/svg-tensor/v1",
+  "members": [
+    "object://svg/node/A",
+    "object://svg/node/B"
+  ],
+  "merge_rule": "weighted-sum",
+  "weights": {
+    "A": 0.5,
+    "B": 0.5
+  }
 }
 ```
 
-Mapping rules: path adjacency ⇒ edges; polyline ⇒ sequential edges; closed paths ⇒ explicit cycle edge; disconnected nodes ⇒ illegal tensor.
+### 17.11.3 Merge Rules
 
-**Weight buffer (`Float32Array`)**
+Allowed: weighted sum, max, min, union (topology only).  
+Forbidden: runtime heuristics, adaptive weighting, time-based merge.
+
+### 17.11.4 GPU Handling
+
+Cluster geometry is resolved before WGSL. GPU kernels see one canonical geometry.
+
+### 17.11.5 Determinism Condition
+
+Cluster result must be identical regardless of member order, load order, or node location.
+
+---
+
+## 17.12 SVG-Tensor → WebGPU Buffer Mapping (`svg-tensor.webgpu.map.v1`)
+
+### 17.9.2 Operation Constraints
+
+Allowed: add, multiply, divide, min/max.  
+Forbidden: fused ops (FMA), transcendental functions, fast-math flags.
+
+### 17.9.3 Reduction Order
+
+All reductions must be:
 
 ```
-struct Weight {
-  float magnitude;  // length / area
-  float confidence; // stroke-width
-  float gradient;   // curvature
+left-to-right
+index-sorted
+```
+
+Parallel reductions must be re-serialized.
+
+### 17.9.4 Rounding Mode
+
+```
+roundTiesToEven
+```
+
+Fixed and non-negotiable.
+
+### 17.9.5 Compliance Condition
+
+Two implementations are equivalent iff:
+
+```
+∀ inputs → outputs bit-identical
+```
+
+ε ≠ allowed.
+
+---
+
+## 17.10 CPU ↔ GPU Equivalence Proof Harness
+
+**Spec ID:** `mx2lm.cpu.gpu.proof.v1`  
+**Status:** Normative
+
+### 17.10.1 Harness Purpose
+
+Prove that GPU projection is a faithful acceleration of CPU math.
+
+### 17.10.2 Required Test Inputs
+
+- canonical SVG-Tensor
+- SCXQ2-expanded buffers
+- fixed dispatch parameters
+
+### 17.10.3 Test Procedure
+
+1. Run CPU geometry traversal
+2. Run GPU WGSL traversal
+3. Compare `node_accum` buffers byte-for-byte
+
+Mismatch ⇒ `non-conformant implementation`.
+
+### 17.10.4 Proof Artifact
+
+Harness must emit:
+
+```json
+{
+  "cpu_hash": "sha256:…",
+  "gpu_hash": "sha256:…",
+  "status": "pass | fail"
 }
 ```
 
-Mapping rules: path length → magnitude; stroke width → confidence; curvature → gradient; transform scale → multiplicative weight.
+### 17.10.5 Replayability
 
-**Meta buffer (`Uint32Array`)**
+Same harness must pass across different GPUs, drivers, and runtimes.
 
-```
-struct Meta {
-  uint nodeCount;
-  uint edgeCount;
-  uint topology; // enum
-  uint flags;    // invariants bitmask
+---
+
+## 17.11 Cluster Geometry Authoring Spec
+
+**Spec ID:** `mx2lm.svg-tensor.cluster.v1`  
+**Status:** Normative
+
+### 17.11.1 Cluster Geometry Law
+
+Cluster geometry composes and never merges implicitly.
+
+### 17.11.2 Cluster SVG-Tensor Object
+
+```json
+{
+  "id": "object://cluster/svg-tensor/v1",
+  "members": [
+    "object://svg/node/A",
+    "object://svg/node/B"
+  ],
+  "merge_rule": "weighted-sum",
+  "weights": {
+    "A": 0.5,
+    "B": 0.5
+  }
 }
 ```
 
-**Deterministic indexing**
+### 17.11.3 Merge Rules
 
-- Assign indices after canonical ordering.
-- Sequential, never reused.
-- Never reordered by GPU.
+Allowed: weighted sum, max, min, union (topology only).  
+Forbidden: runtime heuristics, adaptive weighting, time-based merge.
 
-**Binding constraints**
+### 17.11.4 GPU Handling
 
-Allowed: `STORAGE`, `UNIFORM`, `COPY_SRC`, `COPY_DST`.  
-Forbidden: `MAP_WRITE`, `INDIRECT`.
+Cluster geometry is resolved before WGSL. GPU kernels see one canonical geometry.
 
-**Shader constraints**
+### 17.11.5 Determinism Condition
 
-- Pure, deterministic shaders only.
-- No time-based branching.
-- No buffer writes.
-- No randomness.
-
-**Round-trip invariant**
-
-```
-SVG
- → canonicalize
- → GPU buffers
- → inverse projection
- = same canonical SVG
-```
-
-**Final law statement**
-
-> **SVG-Tensors are geometry frozen into law. GPUs may read them. Runtimes may project them. Nothing may reinterpret them.**
+Cluster result must be identical regardless of member order, load order, or node location.
 
 ---
 
