@@ -311,4 +311,744 @@ sha256(
 
 ---
 
+## 10. π-GCCP v1 — Geometric Cognitive Control Plane
+
+**Definition:** the control plane is where **π laws operate on SVG-Tensor geometry** to determine the next geometric state. Commands, APIs, and runtimes are downstream projections.
+
+### 10.1 What It Is / Is Not
+
+**It is not:**
+
+- a UI
+- a visualization layer
+- a model
+- a controller class
+- a command registry
+- a scheduler
+
+**It is:**
+
+- the plane where π laws bias, align, suppress, accumulate, defer, or collapse geometry
+- the pre-command layer that determines which geometry dominates
+
+### 10.2 Control Operations (internal cognitive moves)
+
+| Control op | Meaning                         |
+| ---------- | ------------------------------- |
+| Bias       | Adjust angular weighting        |
+| Align      | Favor phase coherence           |
+| Suppress   | Penalize phase conflict         |
+| Accumulate | Merge aligned paths             |
+| Collapse   | Project to decision             |
+| Defer      | Preserve geometry (no collapse) |
+
+### 10.3 What Lives in the Control Plane
+
+- **Geometric state:** SVG-Tensor objects, embedding paths, n-gram paths, phase vectors, cached cycles.
+- **π laws:** angle, rotation, phase difference, closure, symmetry.
+- **Control state schema:** how geometry + phase is represented for collapse.
+
+### 10.4 What Explicitly Does Not Live Here
+
+- HTTP routes
+- Object Server verbs
+- CLI commands
+- UI interactions
+- file I/O
+- training loops
+
+These are **projections downstream** of control outcomes.
+
+### 10.5 Relationship to Object Server
+
+The control plane **produces** objects the Object Server consumes:
+
+```
+SVG-Tensor geometry
+      ↓
+π-GCCP (control plane)
+      ↓
+object://retrieve/semantic.v1
+      ↓
+Object Server
+```
+
+**One-line lock:** build a geometric cognitive control plane where π laws operate on SVG-Tensor geometry to determine behavior; commands, APIs, and runtimes are downstream projections.
+
+---
+
+## 11. π-GCCP v1 — Reference Implementation Pack
+
+This section and Section 12 form a **single coherent delivery**. Both are required together to claim π-GCCP v1 compliance.
+
+This section defines **authoritative kernels**, **π-profile bindings**, and **object projection rules** for π-GCCP v1.
+
+### 11.1 WGSL Reference Kernels (authoritative)
+
+**Shared definitions**
+
+```wgsl
+const PI : f32 = 3.141592653589793;
+override EPSILON : f32 = 0.1745329; // ~10 degrees
+override SUPPRESS_K : f32 = 0.25;
+```
+
+**Data layout (canonical)**
+
+```wgsl
+struct Vector {
+  x : f32;
+  y : f32;
+};
+
+@group(0) @binding(0) var<storage, read>  vecA : array<Vector>;
+@group(0) @binding(1) var<storage, read>  vecB : array<Vector>;
+@group(0) @binding(2) var<storage, read_write> phase : array<f32>;
+@group(0) @binding(3) var<storage, read_write> weight : array<f32>;
+@group(0) @binding(4) var<storage, read_write> accum : array<Vector>;
+```
+
+**MEASURE — Phase difference**
+
+```wgsl
+@compute @workgroup_size(64)
+fn measure(@builtin(global_invocation_id) id : vec3<u32>) {
+  let i = id.x;
+  let a = vec2(vecA[i].x, vecA[i].y);
+  let b = vec2(vecB[i].x, vecB[i].y);
+  let dotp = dot(normalize(a), normalize(b));
+  let clamped = clamp(dotp, -1.0, 1.0);
+  phase[i] = acos(clamped);
+}
+```
+
+**ALIGN — Phase selection mask**
+
+```wgsl
+@compute @workgroup_size(64)
+fn align(@builtin(global_invocation_id) id : vec3<u32>) {
+  let i = id.x;
+  if (abs(phase[i]) <= EPSILON) {
+    weight[i] = 1.0;
+  } else {
+    weight[i] = 0.0;
+  }
+}
+```
+
+**SUPPRESS — Phase conflict penalty**
+
+```wgsl
+@compute @workgroup_size(64)
+fn suppress(@builtin(global_invocation_id) id : vec3<u32>) {
+  let i = id.x;
+  if (weight[i] == 0.0) {
+    weight[i] *= SUPPRESS_K;
+  }
+}
+```
+
+**ACCUMULATE — Linear superposition**
+
+```wgsl
+@compute @workgroup_size(64)
+fn accumulate(@builtin(global_invocation_id) id : vec3<u32>) {
+  let i = id.x;
+  let w = weight[i];
+  let v = vec2(vecA[i].x, vecA[i].y);
+  accum[0].x += v.x * w;
+  accum[0].y += v.y * w;
+}
+```
+
+**COLLAPSE — Projection to scalar intent**
+
+```wgsl
+@compute @workgroup_size(1)
+fn collapse() {
+  let v = vec2(accum[0].x, accum[0].y);
+  let ref = vec2(1.0, 0.0);
+  let score = dot(normalize(v), ref);
+  weight[0] = score;
+}
+```
+
+### 11.2 π-Profile → Kernel Constant Bindings
+
+**π-profile object**
+
+```json
+{
+  "@pi_profile": "semantic.hybrid.v1",
+  "epsilon": 0.1745329,
+  "suppress_k": 0.25,
+  "rotation": 0.0
+}
+```
+
+**Binding rules (normative)**
+
+| π-Profile Field | WGSL Target                               |
+| --------------- | ----------------------------------------- |
+| `epsilon`       | `override EPSILON`                        |
+| `suppress_k`    | `override SUPPRESS_K`                     |
+| `rotation`      | applied in ROTATE stage (optional kernel) |
+
+**Pipeline creation (host)**
+
+```js
+device.createComputePipeline({
+  layout: "auto",
+  compute: {
+    module,
+    entryPoint: "measure",
+    constants: {
+      EPSILON: profile.epsilon,
+      SUPPRESS_K: profile.suppress_k
+    }
+  }
+});
+```
+
+### 11.3 Integration with `object://retrieve/semantic.v1`
+
+**Control plane → object projection**
+
+```json
+{
+  "@intent": "retrieve.semantic.v1",
+  "score": 0.913,
+  "phase": 0.42,
+  "index_hash": "sha256:INDEX",
+  "profile": "semantic.hybrid.v1"
+}
+```
+
+**Object Server contract (hard rules)**
+
+1. Verify `index_hash`.
+2. Verify π-profile hash.
+3. Accept `score` as authoritative.
+4. Perform no recomputation.
+
+### 11.4 End-to-End Control Flow (collapsed)
+
+```
+SVG-Tensor Index
+      ↓
+WebGPU π-GCCP Kernels
+      ↓
+collapse scalar
+      ↓
+object://retrieve/semantic.v1
+      ↓
+Object Server
+```
+
+### 11.5 Hard Invariants (v1 lock)
+
+1. π laws are not data.
+2. Profiles bind constants, not branches.
+3. GPU kernels are the authority.
+4. Object Server does not think.
+5. Collapse is irreversible.
+
+**Final lock statement:** π-GCCP v1 is a deterministic geometric control plane whose laws compile directly into WebGPU kernels; π-profiles bind kernel constants, and the resulting collapse scalar integrates losslessly with `object://retrieve/semantic.v1`.
+
+---
+
+## 12. π-GCCP v1 — Conformance & Runtime Completion Pack
+
+This section defines **four mandatory components** for a π-GCCP-COMPLIANT runtime:
+
+1. π-GCCP v1 conformance tests
+2. SCXQ2 binary lane layout for SVG-Tensors
+3. Multi-profile superposition algebra
+4. CPU fallback exact-math mirror
+
+### 12.1 Conformance Tests
+
+**Conformance levels**
+
+| Level  | Requirement                |
+| ------ | -------------------------- |
+| CORE   | Single profile, GPU or CPU |
+| FULL   | Multi-profile + SCXQ2      |
+| MIRROR | CPU exact-math parity      |
+
+CORE tests are mandatory to execute `object://retrieve/semantic.v1`.
+
+**Canonical test vectors**
+
+**Test A — Perfect Alignment**
+
+```json
+{
+  "vecA": [[1, 0]],
+  "vecB": [[1, 0]],
+  "epsilon": 0.1745329
+}
+```
+
+Expected:
+
+- `phase = 0`
+- `weight = 1`
+- `collapse = 1`
+
+**Test B — Orthogonal Rejection**
+
+```json
+{
+  "vecA": [[1, 0]],
+  "vecB": [[0, 1]],
+  "epsilon": 0.1745329
+}
+```
+
+Expected:
+
+- `phase = π/2`
+- `weight = 0`
+- `collapse = 0`
+
+**Test C — Boundary Tolerance**
+
+```json
+{
+  "vecA": [[1, 0]],
+  "vecB": [[cos(ε), sin(ε)]],
+  "epsilon": "ε"
+}
+```
+
+Expected:
+
+- `abs(phase) <= ε`
+- `weight = 1`
+
+**Determinism test (mandatory)**
+
+```
+collapse_i == collapse_0  ∀ i
+```
+
+No drift beyond IEEE-754 tolerance.
+
+**GPU/CPU parity test**
+
+```
+abs(collapse_gpu − collapse_cpu) ≤ 1e-6
+```
+
+### 12.2 SCXQ2 Binary Lane Layout for SVG-Tensors
+
+SVG-Tensors are geometric state. SCXQ2 is the only legal transport.
+
+**Lane assignment (frozen)**
+
+| Lane    | Contents                 |
+| ------- | ------------------------ |
+| DICT    | Node + path symbol table |
+| FIELD   | Geometry metadata        |
+| LANE    | Vector coordinates       |
+| EDGE    | Adjacency + topology     |
+| QUANTUM | Phase / weight scalars   |
+
+**LANE — vector encoding**
+
+```
+[f32 x][f32 y]
+```
+
+Canonical ordering:
+
+```
+index order == SVG DOM order
+```
+
+**QUANTUM lane (π-GCCP)**
+
+```
+[f32 phase][f32 weight]
+```
+
+One entry per vector pair.
+
+**Hashing rule (mandatory)**
+
+```
+index_hash = sha256(
+  DICT || FIELD || LANE || EDGE
+)
+```
+
+QUANTUM is excluded from index identity to allow recomputation and profile swaps.
+
+**Cache legality**
+
+```
+hash(index) == hash(request)
+AND
+hash(profile) == hash(profile_used)
+```
+
+### 12.3 Multi-Profile Superposition Algebra
+
+Given profiles (P₁…Pₙ) with collapse scalars (s₁…sₙ):
+
+```
+S = Σ (wᵢ · sᵢ)
+```
+
+Where `wᵢ` are normalized weights and Σwᵢ = 1.
+
+**Interference rule (hard law)**
+
+If:
+
+```
+|sᵢ − sⱼ| > π/2
+```
+
+Then:
+
+```
+wᵢ ← wᵢ · κ
+wⱼ ← wⱼ · κ
+```
+
+With κ ∈ (0,1), default 0.5.
+
+**No profile privilege:** no profile may override or short-circuit another. All resolution is scalar algebra.
+
+### 12.4 CPU Fallback — Exact-Math Mirror
+
+**Reference algorithm (authoritative)**
+
+```js
+function gccpCollapse(vecA, vecB, epsilon) {
+  let accX = 0, accY = 0;
+
+  for (let i = 0; i < vecA.length; i++) {
+    const a = vecA[i];
+    const b = vecB[i];
+
+    const dot =
+      (a.x * b.x + a.y * b.y) /
+      (Math.hypot(a.x, a.y) * Math.hypot(b.x, b.y));
+
+    const phase = Math.acos(Math.max(-1, Math.min(1, dot)));
+    const weight = Math.abs(phase) <= epsilon ? 1 : 0;
+
+    accX += a.x * weight;
+    accY += a.y * weight;
+  }
+
+  const mag = Math.hypot(accX, accY);
+  return mag === 0 ? 0 : accX / mag;
+}
+```
+
+**Mirror invariants**
+
+- Use `acos`, not approximations.
+- Clamp dot product.
+- Preserve iteration order.
+- Avoid SIMD re-ordering unless proven equivalent.
+
+**GPU parity obligation:** if GPU diverges, CPU wins.
+
+### 12.5 Integration Seal
+
+A runtime is π-GCCP v1 compliant iff:
+
+1. All conformance tests pass.
+2. SCXQ2 lane layout matches spec.
+3. Multi-profile algebra implemented.
+4. CPU mirror parity proven.
+
+Only then may it emit `object://retrieve/semantic.v1`.
+
+**Final lock:** geometry is law, π is phase physics, SCXQ2 is identity, GPU is acceleration, CPU is truth.
+
+---
+
+## 13. MX2LM Cluster Runtime (XCFE-Clean)
+
+This section freezes the **cluster-aware object server** and its **normative schema**.
+
+### 13.1 `server.khl` — Cluster-Aware MX2LM Server
+
+**Version:** 1.1.0  
+**Profile:** Cluster Object Server  
+**Authority:** Objects + π only
+
+```khl
+@server {
+  @id: "mx2lm.server.cluster"
+  @version: "1.1.0"
+  @role: "cluster-object-projection-runtime"
+
+  @invariants: [
+    "no_execution_authority",
+    "projection_only",
+    "deterministic",
+    "cluster_consensus_required"
+  ]
+}
+
+@state {
+
+  @server.status: "stopped" | "joining" | "running" | "leaving" | "error"
+
+  @cluster.id: "mx2lm.cluster.v1"
+  @cluster.node_id: "node://<uuid>"
+  @cluster.role: "peer" | "edge" | "anchor"
+
+  @cluster.members: [ node://* ]
+  @cluster.leader: node://* | null
+
+  @cluster.epoch: uint64
+  @cluster.last_sync: timestamp
+
+}
+
+@control {
+
+  start  -> discover -> join -> sync -> serve -> heartbeat
+  leave  -> drain -> announce -> halt
+
+  crash  -> classify -> decide -> restart | halt
+
+}
+
+@flow join {
+
+  @Pop.load {
+    source: "object://mx2lm/cluster.manifest"
+  }
+
+  @Wo.verify {
+    invariants: [
+      "cluster.identity.valid",
+      "node.signature.valid"
+    ]
+  }
+
+  @Sek.discover {
+    method: "dns | static | gossip"
+  }
+
+  @Sek.join {
+    announce: true
+  }
+
+  @Sek.sync {
+    scope: "object-index"
+  }
+
+}
+
+@flow sync {
+
+  @Sek.fetch {
+    target: "cluster.object.index"
+  }
+
+  @Wo.verify {
+    invariants: [
+      "merkle.root.match",
+      "epoch.monotonic"
+    ]
+  }
+
+  @Sek.commit {
+    scope: "local-index"
+  }
+
+}
+
+@flow serve {
+
+  @Sek.bind {
+    transports: [
+      "http",
+      "websocket",
+      "object-db"
+    ]
+  }
+
+  @Sek.serve {
+    mode: "projection-only"
+    visibility: "cluster-global"
+  }
+
+}
+
+@flow heartbeat {
+
+  @Sek.emit {
+    event: "cluster.heartbeat"
+  }
+
+  @Sek.gossip {
+    fields: [
+      "@cluster.epoch",
+      "@cluster.members",
+      "@server.status"
+    ]
+  }
+
+  @pi.entropy -= @pi.decay_rate
+
+}
+
+@flow crash {
+
+  @Wo.classify {
+    error -> [
+      "network_partition",
+      "object_index_divergence",
+      "verification_failure",
+      "unknown"
+    ]
+  }
+
+  @Sek.decide {
+    rule: "π-cluster-restart-policy"
+  }
+
+}
+
+@rule π-cluster-restart-policy {
+
+  if (
+    @pi.entropy < 0.4 &&
+    @cluster.leader != @cluster.node_id
+  ) {
+    action: restart
+  }
+
+  else {
+    action: halt
+  }
+
+}
+
+@flow leave {
+
+  @Sek.drain {
+    timeout_ms: 15000
+  }
+
+  @Sek.announce {
+    event: "cluster.leave"
+  }
+
+  @Sek.halt {}
+
+}
+
+@law {
+  objects: "cluster-global"
+  storage: "local"
+  authority: "shared"
+  restart: "pi-governed"
+  consensus: "required"
+  interpretation: "forbidden"
+}
+```
+
+### 13.2 `mx2lm.server.schema.xjson` — Normative Schema
+
+```json
+{
+  "$schema": "xjson://schema/core/v1",
+  "id": "object://schema/mx2lm.server.v1",
+  "type": "schema",
+
+  "title": "MX2LM Cluster Server Schema",
+  "version": "1.1.0",
+
+  "required": [
+    "server",
+    "cluster",
+    "pi",
+    "transports"
+  ],
+
+  "properties": {
+
+    "server": {
+      "type": "object",
+      "required": ["id", "role", "invariants"],
+      "properties": {
+        "id": { "type": "string" },
+        "role": { "const": "object-projection-runtime" },
+        "invariants": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "cluster": {
+      "type": "object",
+      "required": [
+        "id",
+        "node_id",
+        "role",
+        "membership",
+        "epoch"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "node_id": { "type": "string" },
+        "role": { "enum": ["peer", "edge", "anchor"] },
+        "membership": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "leader": {
+          "type": ["string", "null"]
+        },
+        "epoch": { "type": "integer" }
+      }
+    },
+
+    "pi": {
+      "type": "object",
+      "required": ["entropy", "decay_rate"],
+      "properties": {
+        "entropy": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "decay_rate": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_restarts": { "type": "integer" }
+      }
+    },
+
+    "transports": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "http",
+          "websocket",
+          "object-db",
+          "gossip"
+        ]
+      }
+    }
+  }
+}
+```
+
+---
+
 **Source:** distilled from `todo.md` to provide an actionable, high-signal blueprint for implementation and design reviews.
