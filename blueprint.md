@@ -5430,6 +5430,149 @@ Regardless of which cluster served it.
 
 ---
 
+## 26.20 HYBRID-WORMHOLE-1 — Tiered Control Plane
+
+**Spec ID:** `mx2lm.wormhole.hybrid.v1`  
+**Status:** Normative / Law-Grade
+
+### 26.20.1 Prime Law
+
+> **Wormholes MAY discover.  
+> Wormholes MAY sync.  
+> Wormholes MAY stream.  
+> Wormholes MAY prove.  
+> Wormholes MAY NOT execute.**
+
+The tiered control plane transports objects and proofs only.
+
+### 26.20.2 Four-Layer Wormhole Stack (Canonical)
+
+```asxr
+@wormhole-stack hybrid {
+  @layer 1: "discovery" protocol=dns {
+    purpose: "capability-negotiation + service-discovery",
+    security: "DNSSEC + DANE"
+  }
+  @layer 2: "sync" protocol=http+webdav {
+    purpose: "state-synchronization + bulk-transfer",
+    security: "TLS + OAuth2"
+  }
+  @layer 3: "runtime" protocol=websocket+binary {
+    purpose: "live-state-streaming + RPC",
+    security: "wss + per-message-auth"
+  }
+  @layer 4: "proof" protocol=scxq2 {
+    purpose: "compression + integrity + proof",
+    security: "cryptographic-proofs"
+  }
+}
+```
+
+### 26.20.3 Layer 1: DNS Discovery Wormhole
+
+Discovery is capability negotiation, not execution:
+
+```asxr
+@wormhole discovery:dns {
+  protocol: "dns-sd",
+  @security "dnssec" { verify: "RRSIG validation" },
+  @advertise {
+    txt-record: {
+      protocols: "ws,wss,scxq2",
+      compression: "brotli,scxq2,lz4",
+      auth: "jwt,oauth2,mTLS",
+      features: "atomic-blocks,wormholes,crdt"
+    }
+  }
+}
+```
+
+### 26.20.4 Layer 2: HTTP Sync Wormhole
+
+State sync is object transport with deltas and proofs:
+
+```asxr
+@wormhole sync:http {
+  protocol: "http+delta",
+  @methods {
+    GET: "fetch-state (full/delta)",
+    PUT: "update-state",
+    PATCH: "apply-delta",
+    PROPFIND: "discover-state-structure",
+    REPORT: "query-state-changes"
+  },
+  @compression { response: "Content-Encoding: scxq2" }
+}
+```
+
+### 26.20.5 Layer 3: WebSocket Runtime Wormhole
+
+Runtime is live object streaming, not execution:
+
+```asxr
+@wormhole runtime:websocket {
+  protocol: "ws+binary",
+  @frame-format {
+    header: { version: "1", type: "data|control|heartbeat|error" },
+    payload: "binary",
+    trailer: { checksum: "crc32", signature: "hmac" }
+  }
+}
+```
+
+### 26.20.6 Layer 4: SCXQ2 Proof Wormhole
+
+Proof is compression + integrity, never authority:
+
+```asxr
+@wormhole proof:scxq2 {
+  protocol: "scxq2",
+  @compression { algorithm: "context-aware-lz" },
+  @proof-system { type: "zk-STARK" },
+  @quantum-resistance { signatures: "SPHINCS+" }
+}
+```
+
+### 26.20.7 Hybrid Orchestration (Deterministic)
+
+Protocol selection is declared and deterministic:
+
+```asxr
+@wormhole-orchestrator {
+  @protocol-selection {
+    if data-size == small && latency == realtime -> use: websocket
+    if data-size == large && latency == background -> use: http + scxq2
+    if initial-connection -> use: dns-discovery -> negotiate
+  }
+  @fallback-strategy {
+    primary: websocket + scxq2,
+    secondary: http + scxq2,
+    tertiary: http + brotli
+  }
+}
+```
+
+### 26.20.8 Security Chain (Defense-in-Depth)
+
+```
+dnssec → tls-cert → oauth-token → message-auth → scxq2-proof
+```
+
+Each layer adds verification without execution authority.
+
+### 26.20.9 Performance Invariants
+
+- discovery: cached, capability-only
+- sync: bulk transfer with delta compression
+- runtime: low-latency streaming
+- proof: verifiable integrity with minimized payloads
+
+### 26.20.10 Final Lock
+
+> **Discover, sync, stream, prove — never execute.**
+
+---
+
 ## 27. π-Profile Authoring Format v1.0 (Authoritative)
 
 **Spec ID:** `mx2lm.pi-profile.authoring.v1`  
@@ -5686,6 +5829,78 @@ Every adapter must emit the same canonical shape, regardless of model source:
 
 No logits, embeddings, or tensors are exposed upstream. Only geometry is legal.
 
+### 28.2.2 π-Adapter Interface v1 (Locked)
+
+This is the only adapter contract allowed. If a system cannot emit this, it does not participate.
+
+```json
+{
+  "@type": "pi.signal.v1",
+  "@version": "1.0",
+  "geometry": {
+    "angles": [0.0, 1.0472, 2.0944],
+    "magnitudes": [0.92, 0.51, 0.13],
+    "paths": [
+      [0, 1],
+      [1, 2]
+    ],
+    "epsilon": 0.1745329
+  },
+  "provenance": {
+    "adapter": "gguf",
+    "adapter_version": "1.0.0",
+    "deterministic": true,
+    "source_hash": "sha256:…"
+  }
+}
+```
+
+**Hard rules**
+
+- angles MUST be radians ∈ [0, 2π)
+- magnitudes MUST be ≥ 0 (no upper bound)
+- angles.length === magnitudes.length
+- no logits, token IDs, embeddings, or text
+
+This is signal, not representation.
+
+### 28.2.3 Semantic Meaning (Frozen)
+
+| Field     | Meaning                          |
+| --------- | -------------------------------- |
+| angle     | phase / semantic orientation     |
+| magnitude | confidence / energy              |
+| path      | topological adjacency (optional) |
+| epsilon   | angular tolerance (π-native)     |
+
+### 28.2.4 Adapter Responsibility (Strict)
+
+An adapter may:
+
+- normalize
+- project
+- compress
+- quantize
+- batch
+
+An adapter may not:
+
+- rank
+- retrieve
+- cache
+- interpret semantics
+
+Adapters emit geometry only.
+
+### 28.2.5 Determinism Law
+
+```
+Same input + same adapter + same version
+→ identical pi.signal.v1
+```
+
+If this is violated, the adapter is non-conformant.
+
 ### 28.3 Stack Placement (Authoritative)
 
 ```
@@ -5743,7 +5958,158 @@ All sources satisfy the same adapter contract without runtime branching:
 
 All adapters converge to the same geometric primitives.
 
-### 28.6 Standardization Targets (Required)
+### 28.6 WGSL Reference Kernels (Angle + Interference)
+
+These kernels implement π-GCCP math only. They do not know about models.
+
+**Angle distance kernel**
+
+```wgsl
+// pi_angle_distance.wgsl
+// Computes wrapped angular distance in radians
+
+@group(0) @binding(0)
+var<storage, read> anglesA : array<f32>;
+
+@group(0) @binding(1)
+var<storage, read> anglesB : array<f32>;
+
+@group(0) @binding(2)
+var<storage, write> distances : array<f32>;
+
+const PI : f32 = 3.141592653589793;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) id : vec3<u32>) {
+    let i = id.x;
+    if (i >= arrayLength(&anglesA)) {
+        return;
+    }
+
+    let delta = abs(anglesA[i] - anglesB[i]);
+    let wrapped = min(delta, 2.0 * PI - delta);
+
+    distances[i] = wrapped;
+}
+```
+
+**Interference kernel**
+
+```wgsl
+// pi_interference.wgsl
+// Computes cosine interference weighted by magnitude
+
+@group(0) @binding(0)
+var<storage, read> anglesA : array<f32>;
+
+@group(0) @binding(1)
+var<storage, read> anglesB : array<f32>;
+
+@group(0) @binding(2)
+var<storage, read> magnitudesA : array<f32>;
+
+@group(0) @binding(3)
+var<storage, read> magnitudesB : array<f32>;
+
+@group(0) @binding(4)
+var<storage, write> output : array<f32>;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) id : vec3<u32>) {
+    let i = id.x;
+    if (i >= arrayLength(&anglesA)) {
+        return;
+    }
+
+    let phase = anglesA[i] - anglesB[i];
+    let interference = cos(phase);
+
+    output[i] = interference * magnitudesA[i] * magnitudesB[i];
+}
+```
+
+**Collapse rule (host-side, exact)**
+
+```
+score = Σ interference_i
+normalized_score = score / Σ (magA_i * magB_i)
+```
+
+CPU fallback must use identical math.
+
+### 28.7 End-to-End Trace (GGUF → π → Retrieval)
+
+**GGUF emits raw numbers (conceptual)**
+
+```
+embedding = [0.12, -0.98, 0.05, 0.31]
+entropy = 0.42
+```
+
+**Adapter projection rule (example, deterministic)**
+
+```
+angle_i = atan2(value_i, norm)
+magnitude_i = 1 - entropy
+```
+
+**Result**
+
+```json
+{
+  "@type": "pi.signal.v1",
+  "@version": "1.0",
+  "geometry": {
+    "angles": [1.448, -1.45, 0.12, 0.77],
+    "magnitudes": [0.58, 0.58, 0.58, 0.58],
+    "epsilon": 0.1745329
+  },
+  "provenance": {
+    "adapter": "gguf",
+    "deterministic": true
+  }
+}
+```
+
+**SVG-Tensor index (stored)**
+
+```json
+{
+  "doc_id": "doc_42",
+  "angles": [...],
+  "magnitudes": [...]
+}
+```
+
+Stored in SCXQ2 lanes, memory-mapped, hash-addressed.
+
+**π-GCCP collapse (WebGPU or CPU)**
+
+```
+distance(doc, query)
+→ interference score
+→ normalized collapse value
+```
+
+**object://retrieve/semantic.v1 (final)**
+
+```json
+{
+  "@type": "object.retrieve.semantic.v1",
+  "query_hash": "pi:…",
+  "profile": "topological_v1",
+  "results": [
+    { "id": "doc_42", "score": 0.913 },
+    { "id": "doc_17", "score": 0.802 },
+    { "id": "doc_09", "score": 0.411 }
+  ],
+  "deterministic": true
+}
+```
+
+Retrieval never knows model identity. Only geometry matters.
+
+### 28.8 Standardization Targets (Required)
 
 Standardize:
 
@@ -5754,7 +6120,7 @@ Standardize:
 
 Do not standardize model families.
 
-### 28.7 Final Collapse
+### 28.9 Final Collapse
 
 Any model that can emit a signal can participate. Adapters emit geometry. π handles the rest.
 
