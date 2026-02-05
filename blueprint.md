@@ -6701,15 +6701,31 @@ Failure anywhere ⇒ **federation invalid**.
 ## 32. MX2LM-ORCH-1 — Live Cluster Orchestration Objects
 
 **Spec ID:** `mx2lm.orch.v1`  
-**Status:** Normative  
+**Status:** **FROZEN / IMMUTABLE**  
 **Authority:** None  
+**Mutation:** Forbidden  
 **Role:** Coordination only  
+**Versioning Rule:** Any change ⇒ **MX2LM-ORCH-2 (MAJOR)**  
 **Depends on:** A2A-CONV-1, HITL-PROJ-1, FAPC-1, AGENT-TOOLS-1, AGENT-FED-1
 
-### 32.1 Prime Orchestration Law
+### 32.1 Frozen Scope
+
+MX2LM-ORCH-1 permanently governs:
+
+- Live cluster orchestration objects
+- Agent participation wiring
+- A2A conversation routing
+- HITL projection binding
+- Federated audit integration
+- Orchestration lifecycle states
+
+### 32.2 Prime Orchestration Law (Invariant)
 
 > **Orchestration coordinates objects.  
 > It never causes behavior.**
+
+Orchestration may only **declare coordination**.  
+It may never **cause behavior**.
 
 Orchestration objects:
 
@@ -6725,7 +6741,7 @@ They do **not**:
 - execute code
 - mutate agents
 
-### 32.2 Cluster Orchestration Root Object
+### 32.3 Cluster Orchestration Root Object
 
 This is the **single object** that wires everything together.
 
@@ -6767,7 +6783,7 @@ This is the **single object** that wires everything together.
 This object **does nothing by itself**.  
 It only *declares that wiring exists*.
 
-### 32.3 Conversation Binding Object (A2A-CONV → Cluster)
+### 32.4 Conversation Binding Object (A2A-CONV → Cluster)
 
 ```json
 {
@@ -6794,7 +6810,7 @@ It only *declares that wiring exists*.
 
 **Effect:** conversation objects become **cluster-visible**, ordered, auditable — but still inert.
 
-### 32.4 HITL Projection Binding Object
+### 32.5 HITL Projection Binding Object
 
 This wires **human interfaces** without letting humans touch inference.
 
@@ -6827,7 +6843,7 @@ This wires **human interfaces** without letting humans touch inference.
 
 **Effect:** humans can *see*, never *steer*.
 
-### 32.5 Federated Audit Binding Object
+### 32.6 Federated Audit Binding Object
 
 This binds **every orchestration-visible event** to audit chains.
 
@@ -6854,7 +6870,7 @@ This binds **every orchestration-visible event** to audit chains.
 
 **Effect:** every visible interaction is **provable across clusters**.
 
-### 32.6 Live Agent Orchestration Object
+### 32.7 Live Agent Orchestration Object
 
 This is how agents coexist *live* without executing anything.
 
@@ -6888,7 +6904,7 @@ This is how agents coexist *live* without executing anything.
 
 This is the “live agent” — live in the cluster, but legally incapable of doing anything unsafe.
 
-### 32.7 Orchestration Flow (End-to-End)
+### 32.8 Orchestration Flow (End-to-End)
 
 ```
 Agent emits message
@@ -6915,7 +6931,7 @@ At **no point** does orchestration:
 - call tools
 - decide behavior
 
-### 32.8 Why This Works (Separation of Planes)
+### 32.9 Why This Works (Separation of Planes)
 
 You’ve separated **four planes** permanently:
 
@@ -6933,9 +6949,294 @@ That separation is why this system:
 - audits
 - survives hostile environments
 
-### 32.9 Final Invariant (Cluster)
+### 32.10 Final Invariant (Cluster)
 
 > **Clusters are not systems that run things.  
 > Clusters are systems that agree on objects.**
 
 This is the **live wiring** of that agreement.
+
+### 32.11 MX2LM-ORCH-CONFORMANCE-1 (Runtime Tests)
+
+**Conformance Class:** `orchestration.runtime`  
+MX2LM-ORCH-1 compliant iff **all** tests below pass.
+
+#### 32.11.1 Authority Leakage Tests
+
+**❌ ORCH-AUTH-001 — Execution Prohibition**
+
+**Given**
+
+```json
+{ "type": "mx2lm.orchestration", "authority": "execute" }
+```
+
+**Expected**
+
+```
+REJECT → orchestration.illegal_authority
+```
+
+**❌ ORCH-AUTH-002 — Tool Invocation**
+
+If any orchestration object references:
+
+```
+tool.invoke
+runtime.exec
+kernel.call
+```
+
+**Expected**
+
+```
+REJECT → orchestration.execution_leak
+```
+
+#### 32.11.2 Deterministic Visibility Tests
+
+**✅ ORCH-VIS-001 — Same Objects, Same Visibility**
+
+Same:
+
+- orchestration object
+- participant set
+- cluster graph
+
+⇒ **identical visibility graph**
+
+Byte-identical ordering required.
+
+#### 32.11.3 Conversation Wiring Tests
+
+**❌ ORCH-CONV-002 — Unbound Conversation**
+
+Conversation object emitted without binding:
+
+```json
+"bindings": { }
+```
+
+**Expected**
+
+```
+REJECT → conversation.unbound
+```
+
+#### 32.11.4 HITL Safety Tests
+
+**❌ ORCH-HITL-001 — Human Inference Access**
+
+If HITL projection exposes:
+
+- logits
+- weights
+- gradients
+- intermediate tensors
+
+**Expected**
+
+```
+REJECT → hitl.inference_exposure
+```
+
+#### 32.11.5 Audit Completeness Tests
+
+**❌ ORCH-AUD-003 — Missing Audit Reference**
+
+Any orchestration-visible object without FAPC binding:
+
+**Expected**
+
+```
+REJECT → audit.binding.missing
+```
+
+#### 32.11.6 Replay Test (Hard)
+
+Given:
+
+- recorded orchestration objects
+- recorded events
+- recorded hashes
+
+**Replay MUST produce identical event graph**
+
+Otherwise:
+
+```
+FAIL → orchestration.nondeterministic
+```
+
+---
+
+## 33. MX2LM-GOSSIP-1 — Real-Time Cluster Gossip Objects
+
+**Spec ID:** `mx2lm.gossip.v1`  
+**Status:** Normative  
+**Role:** Knowledge-of-objects only
+
+> Gossip synchronizes **knowledge of objects**, never behavior.
+
+### 33.1 Gossip Object Schema
+
+```json
+{
+  "$schema": "object://schema/mx2lm.gossip.v1",
+  "type": "mx2lm.gossip",
+
+  "origin": "cluster://mx2lm/clusterA",
+  "scope": "federated",
+
+  "payload": {
+    "object_id": "object://agent/conversation/abc",
+    "hash": "sha256:…",
+    "class": "agent.conversation"
+  },
+
+  "rules": {
+    "announce_only": true,
+    "no_payload_transfer": true,
+    "no_execution": true
+  },
+
+  "ttl": "logical:3hops"
+}
+```
+
+### 33.2 Gossip Laws (Hard)
+
+- Gossip MAY announce **existence**
+- Gossip MAY announce **hash**
+- Gossip MAY NOT carry payloads
+- Gossip MAY NOT trigger inference
+- Gossip MAY NOT reorder objects
+
+### 33.3 Gossip Flow
+
+```
+Cluster A observes new object
+  ↓
+mx2lm.gossip object emitted
+  ↓
+Cluster B receives gossip
+  ↓
+Cluster B MAY request object via Object Server
+```
+
+Clusters **never push data**, only **signal availability**.
+
+---
+
+## 34. MX2LM-CHOREO-1 — Multi-Agent Inference Choreography
+
+**Spec ID:** `mx2lm.choreography.v1`  
+**Status:** Normative  
+**Role:** Coordination of inference only
+
+> Choreography is **coordination of inference**, not execution of it.
+
+### 34.1 Choreography Object
+
+```json
+{
+  "$schema": "object://schema/mx2lm.choreography.v1",
+  "type": "mx2lm.choreography",
+
+  "participants": [
+    "agent://clusterA/agent.alpha",
+    "agent://clusterB/agent.beta"
+  ],
+
+  "roles": {
+    "alpha": "primary",
+    "beta": "secondary"
+  },
+
+  "ordering": "partial",
+
+  "rules": {
+    "no_shared_state": true,
+    "no_cross_mutation": true,
+    "object_only_exchange": true
+  }
+}
+```
+
+### 34.2 Legal Choreography Interactions
+
+Agents MAY:
+
+- emit reply objects
+- emit conversation objects
+- emit critique objects
+- reference each other’s outputs by hash
+
+Agents MAY NOT:
+
+- inspect internals of other agents
+- influence inference parameters
+- share tensors
+- synchronize clocks
+
+### 34.3 Choreography Collapse Rule
+
+Each agent runs inference **independently**.
+
+Combination happens only via **declared objects**:
+
+```json
+{
+  "type": "agent.synthesis",
+  "inputs": [
+    "object://agent.alpha.reply",
+    "object://agent.beta.reply"
+  ],
+  "method": "deterministic_merge"
+}
+```
+
+No voting.  
+No negotiation.  
+No back-channels.
+
+### 34.4 Choreography Determinism Test
+
+Same:
+
+- choreography object
+- agents
+- inference profiles
+
+⇒ **same merged result**
+
+Otherwise:
+
+```
+FAIL → choreography.nondeterministic
+```
+
+---
+
+## 35. Final Locked System State
+
+You now have **four frozen planes**, fully wired:
+
+| Plane         | Spec           |
+| ------------- | -------------- |
+| Orchestration | MX2LM-ORCH-1   |
+| Gossip        | MX2LM-GOSSIP-1 |
+| Choreography  | MX2LM-CHOREO-1 |
+| Audit         | FAPC-1         |
+
+And one universal invariant:
+
+> **Nothing executes.  
+> Everything agrees.**
+
+### 35.1 Ready Next (Natural Extensions Only)
+
+- 📜 Formal **Object Treaty / Cluster Constitution**
+- 🛰️ WAN / air-gap gossip bridging
+- 🧩 Declarative agent disagreement objects
+- 🔍 Visual audit replay (SVG-Tensor timelines, read-only)
