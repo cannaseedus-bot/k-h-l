@@ -1,0 +1,29 @@
+{
+  "$schema": "xjson://schema/core/v1",
+  "$id": "kuhul://schema/micronaut/semantics.v1",
+  "type": "object",
+  "title": "Micronaut IO Semantics",
+  "properties": {
+    "message": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "time": { "type": "integer" },
+        "role": { "type": "string", "enum": ["user", "system", "micronaut"] },
+        "intent": { "type": "string", "enum": ["chat", "generate", "classify", "complete"] },
+        "context": { "type": "string" },
+        "payload": { "type": "string" }
+      },
+      "required": ["id", "time", "role", "intent", "payload"]
+    },
+    "stream": {
+      "type": "object",
+      "properties": {
+        "header": { "type": "string" },
+        "payload": { "type": "string" }
+      },
+      "required": ["header", "payload"]
+    }
+  },
+  "required": ["message", "stream"]
+}

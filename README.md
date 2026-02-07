@@ -185,6 +185,28 @@ Canonical Micronaut shape:
 
 Micronauts are data, not logic.
 
+### 4.2.1 Micronaut object server (PowerShell-only)
+
+Micronaut is a sealed SCO/1 object with file-only IO. There is no JavaScript runtime; a host-native PowerShell orchestrator only routes files and invokes object μ-ops.
+
+Canonical layout:
+
+```
+micronaut/
+├─ micronaut.s7
+├─ object.toml
+├─ semantics.xjson
+├─ brains/
+├─ io/
+│  ├─ chat.txt
+│  ├─ stream.txt
+│  └─ snapshot/
+├─ trace/
+└─ proof/
+```
+
+The append-only `chat.txt` and `stream.txt` files form the sole IO contract for this object.
+
 ### 4.3 SBS-1 responsibilities (tight)
 
 1. **Classification → lane selection**
